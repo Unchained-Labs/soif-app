@@ -263,9 +263,10 @@ export default async function Page({ searchParams }: PageProps) {
           <div className="card" style={{ marginTop: 12 }}>
             <WaterChart points={points} />
             <p className="cap">
-              Every point carries a wide range
+              Bars are daily consumption; the line is the running total on the right-hand axis.
+              Every bar carries a wide range
               {spread ? ` — this account's uncertainty spans roughly ${spread} the mid line` : ""},
-              driven by unknown per-token energy and grid mix. Hover any point for its band.
+              driven by unknown per-token energy and grid mix. Hover any bar for its band.
             </p>
           </div>
         </section>
