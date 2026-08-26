@@ -15,13 +15,6 @@ Third repo in the soif project:
 > [`METHODOLOGY.md`](https://github.com/Unchained-Labs/soif/blob/main/METHODOLOGY.md) before
 > quoting anything.
 
-<a href="https://github.com/Unchained-Labs/soif-app/raw/main/docs/promo/soif-promo.mp4">
-  <img src="docs/promo/poster.jpg" alt="soif — 38 second demo: the install wizard and the dashboard running on 21,836 real records" width="100%">
-</a>
-
-<p align="center"><em>38 second demo — real wizard output and the live dashboard, not mockups.
-<a href="https://github.com/Unchained-Labs/soif-app/raw/main/docs/promo/soif-promo.mp4">Play&nbsp;▸</a></em></p>
-
 ## Quick start
 
 ```bash
