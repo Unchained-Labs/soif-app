@@ -80,6 +80,8 @@ export const usageRecords = sqliteTable(
     serviceTier: text("service_tier"),
     workspaceId: text("workspace_id"),
     apiKeyId: text("api_key_id"),
+    /** Working directory the call was made from — the per-project grouping key. */
+    project: text("project"),
     /** Provenance for the local scan: which transcript, which session. */
     sessionId: text("session_id"),
     sourceFile: text("source_file"),
@@ -92,6 +94,7 @@ export const usageRecords = sqliteTable(
     uniqueIndex("usage_records_source_dedupe_idx").on(t.sourceId, t.dedupeKey),
     index("usage_records_day_idx").on(t.dayKey),
     index("usage_records_model_idx").on(t.model),
+    index("usage_records_project_idx").on(t.project),
     index("usage_records_bucket_idx").on(t.bucketStart),
   ],
 );

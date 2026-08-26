@@ -17,24 +17,39 @@ Third repo in the soif project:
 
 ## Quick start
 
-No infrastructure required — SQLite, and a scan that reads your own machine:
-
 ```bash
-npm install
-npm run db:migrate
-npx soif-scan
+npm run setup
 ```
 
-That reads Claude Code transcripts on this machine and prints what they cost in water. It works
-on **any plan including personal Pro/Max**, needs no credential, and nothing leaves the box.
+That is the whole thing. The wizard detects which AI tools on this machine have readable usage,
+generates an encryption key, creates the database, scans everything it found, and tells you what
+it cost:
 
-Then bring up the dashboard:
+```
+[1/5] Looking for AI tools with readable usage
+  ✓ Claude Code (local scan) (255 files)
+  ✓ Codex CLI (local scan) (31 files)
+[2/5] Configuration            ✓ Created .env with a new encryption key.
+[3/5] Preparing the database   ✓ Schema is up to date.
+[4/5] Scanning                 ✓ Scanned 536 MB, stored 21,624 new records.
+[5/5] What that cost
+
+  540 L of freshwater, across 21,624 calls.
+  range 44.8 L – 6,232 L · mid scenario
+```
+
+Then open the dashboard:
 
 ```bash
 npm run build && npm start   # http://localhost:3000
 ```
 
-For an organization with an Anthropic admin key, or to run it somewhere shared:
+No infrastructure, no credential, nothing leaves the machine. It works on **any plan, including
+personal Pro/Max**, which have no usage API at all.
+
+`npx soif-init --dry-run` shows what it would do; `--yes` skips the prompts for scripted installs.
+
+To run it somewhere shared, with Postgres:
 
 ```bash
 cp .env.example .env         # set SOIF_ENCRYPTION_KEY
@@ -43,13 +58,79 @@ docker compose up
 
 ## Where the numbers come from
 
-| # | Source | Auth | What you get | Status |
-|---|---|---|---|---|
-| 1 | **Anthropic Usage Admin API** | Admin key `sk-ant-admin01-…` | Real token counts per model, geo, workspace | Client + backfill planner |
-| 2 | **Claude Code local scan** | none | Real per-message usage from local transcripts | **Shipped** |
-| 3 | OpenAI org usage API | org admin key | Per-model token counts | Not yet |
-| 4 | Claude Enterprise Analytics | Analytics key | For claude.ai orgs with no Console key | Not yet |
-| 5 | CSV import | none | Escape hatch | Not yet |
+| Source | Vendor | Auth | Verified against |
+|---|---|---|---|
+| **Claude Code local scan** | Anthropic | none | A real 527 MB / 255-file corpus |
+| **Codex CLI local scan** | OpenAI | none | CodexBar's rollout fixtures and token accounting |
+| **Gemini CLI local scan** | Google | none | `gemini-cli`'s own `chatRecordingService.ts` |
+| **Qwen Code local scan** | Qwen | none | Fixtures; shares Gemini CLI's format, which it forked |
+| **CSV import** | any | none | Round-tripped multi-vendor exports |
+| **Anthropic Usage Admin API** | Anthropic | `sk-ant-admin01-…` | Recorded fixtures |
+| **OpenAI organization usage** | OpenAI | org admin key | Recorded fixtures; endpoint checked against current docs |
+
+Every adapter states what it was verified against, in the catalogue and on the dashboard. That
+matters more than a support count: **an adapter that silently reads zeros is indistinguishable
+from a provider you did not use.** Nothing here was written from memory of a format.
+
+Sources that cannot be read at all say so rather than being omitted — personal Claude Pro/Max and
+ChatGPT Plus/Pro expose no usage API, and the UI points at the matching local scan instead.
+
+### Not built, and why
+
+| Tool | Reason |
+|---|---|
+| goose | Stores sessions in SQLite (`sessions.db`), not JSONL — needs a different reader |
+| opencode | Migrated to a versioned database with active migrations; a moving schema breaks silently |
+| Cursor | `ai-code-tracking.db` records edits, not token usage |
+| aider | Token counts live in analytics, not the chat history file |
+
+All four are reachable today via CSV import. Adding a real adapter means writing a spec plus a
+fixture — see `src/lib/scan/specs.ts`, where every spec must name the evidence it was built from.
+
+The two local scans need no credential and work on personal plans. The CSV import covers
+everything else — Google, Mistral, xAI, DeepSeek, a self-hosted model, anything with an export:
+
+```bash
+npx soif-scan --import usage.csv                          # Anthropic-style columns
+npx soif-scan --import usage.csv --csv-inclusive-input     # OpenAI-style columns
+```
+
+### Providers disagree about what a token count means
+
+Three disagreements, each worth a large error, each handled in one place rather than per adapter:
+
+**1. Does `input` include cache reads?**
+
+| | Convention |
+|---|---|
+| Anthropic, Claude Code | `input_tokens` **excludes** cache reads |
+| OpenAI, Codex, Google | `input_tokens` **includes** them as a subset |
+
+soif charges cache reads at 1% of an output token and uncached input at 10%. On an agentic
+workload — cache reads outnumber output tokens ~300:1 on the reference corpus — passing an OpenAI
+count through as Anthropic-shaped bills every cached token at ten times its weight *and* counts it
+twice.
+
+**2. Are thinking tokens inside the output count?**
+
+| | Convention |
+|---|---|
+| Anthropic, OpenAI | `output_tokens` **already contains** thinking tokens |
+| Google | `candidatesTokenCount` **excludes** `thoughtsTokenCount`; both sum into the total |
+
+Reasoning is charged at the *full* output rate — the most expensive class there is. Adding
+Anthropic's twice inflates it; not adding Google's discards most of the decode cost on a thinking
+model, which is exactly what Gemini CLI runs.
+
+**3. Where was it served?**
+
+Water intensity is a property of the data centre, not the model. Anthropic on AWS (~0.18 L/kWh
+WUE), OpenAI on Azure (~0.49), Google on its own fleet (~1.10) — a 6× spread on the on-site term
+alone. In the synthetic Gemini corpus, on-site water is 26% of the total; on the Claude corpus it
+is 6%. Same arithmetic, different fleet.
+
+Every provider declares its conventions in `src/lib/sources/providers.ts`; `normalizeTokens` is
+the single place raw counts become comparable; the database only ever stores disjoint counts.
 
 **There is no OAuth "connect your Claude account" flow, because one does not exist.** Anthropic's
 Usage & Cost API documentation states plainly that *the Admin API is unavailable for individual
@@ -58,9 +139,11 @@ this project deliberately does not build on it — it returns quota percentages 
 counts, it is not a public contract, and it will break. If your plan cannot be read, the UI says
 so and points at the local scan rather than inventing a source.
 
-## The local scan
+## The local scans
 
-The scanner is adapted from [steipete/CodexBar](https://github.com/steipete/CodexBar)'s
+### Claude Code
+
+Adapted from [steipete/CodexBar](https://github.com/steipete/CodexBar)'s
 `CostUsageJsonl`, which solves the same problem in Swift for the same transcript format. What
 carried over, and why each part earns its keep:
 
@@ -89,11 +172,28 @@ CodexBar will not touch Claude's credential store for multi-account either, dele
 external `claude-swap` binary. Account attribution here comes from the non-secret `oauthAccount`
 label in `.claude.json`; nothing reads a token.
 
+### Codex CLI
+
+Codex writes one JSONL rollout per session under `~/.codex/sessions/YYYY/MM/DD/`. Two properties
+of that format decide whether the numbers come out right, and both are covered by tests:
+
+- **`total_token_usage` is cumulative for the session; `last_token_usage` is the per-turn delta.**
+  Summing the totals multiplies usage by roughly the number of turns. The parser reads deltas and
+  falls back to the final total only when no delta was ever reported.
+- **The model arrives on a `turn_context` record, not on the usage event.** An AND-style byte
+  prefilter drops those records and every row comes out unattributed — which is exactly what
+  happened until a test caught it, hence `requireAny` on the scanner.
+
+Session `cwd` becomes the project label, so Codex usage groups alongside Claude usage in the
+per-project view.
+
 ```bash
+npx soif-init                   # the wizard: detect, configure, migrate, scan
 npx soif-scan --help
 npx soif-scan --full            # ignore cursors, re-read everything
 npx soif-scan --no-embodied     # operational water only
 npx soif-scan --json            # machine-readable
+npx soif-scan --import x.csv    # import any provider's export
 npx soif-scan --push https://soif.internal   # send aggregates to your own instance
 ```
 
@@ -114,16 +214,21 @@ demonstrated, not claimed.
   deviates from the original brief's "Postgres" and is the one place it does. Drizzle has no
   portable column builder, so the two schemas are written out separately and
   `tests/schema.test.ts` asserts they declare identical tables, columns and indexes.
+- **Providers are a catalogue, not a special case.** Adding one means a spec in
+  `src/lib/sources/providers.ts` and an adapter — the normalization, storage, estimation and
+  dashboard grouping are already provider-agnostic.
 - **Raw token counts are the source of truth.** Estimates are derived and keyed by
   `factors_version`, so a factor-set upgrade re-derives history instead of stranding it.
 
 ```
 src/lib/soif/       estimator ported from Python, driven entirely by factors.json
-src/lib/scan/       transcript discovery, incremental JSONL scanner, parser, ingest
-src/lib/sources/    Anthropic Admin API client with paginated backfill
+src/lib/scan/       incremental JSONL scanner; Claude Code and Codex adapters;
+                    declarative spec engine + verified specs; ingest
+src/lib/sources/    provider catalogue, token normalization, Anthropic + OpenAI clients, CSV
 src/lib/pipeline/   raw token counts → water estimates → aggregates
 src/lib/db/         dual-dialect schema, repository, migrations
 src/lib/security/   envelope encryption for credentials
+cli/                soif-init (the wizard) and soif-scan
 ```
 
 ## Security
@@ -173,13 +278,23 @@ npm run db:generate   # regenerate migrations after a schema change
 
 Tests run against recorded fixtures and synthetic transcripts, never the live API.
 
+## What the dashboard shows
+
+Water over time, and breakdowns by **model**, **provider** and **project**. Projects come from the
+working directory each call was made in, which the local scans record; API sources have no notion
+of one and are grouped honestly as unattributed rather than dropped.
+
 ## Roadmap
 
 1. ~~`factors.json` + parity CI in the `soif` repo~~ — [PR #3](https://github.com/Unchained-Labs/soif/pull/3)
 2. ~~Schema, estimate pipeline, local-scan ingestion~~
 3. ~~Dashboard UI~~
-4. Admin API backfill worker wired to the scheduler (client and pagination planner are done)
-5. OpenAI source, Claude Enterprise Analytics, CSV import
+4. ~~Multi-provider: Codex local scan, OpenAI usage client, CSV import~~
+5. ~~Install wizard~~
+6. ~~Gemini CLI and Qwen Code adapters~~
+7. Wire the Admin API clients to a scheduled worker (clients and pagination are done; nothing runs
+   them on a timer yet)
+8. goose and opencode, both of which need a SQLite reader; Claude Enterprise analytics
 
 ## License
 

@@ -67,6 +67,7 @@ export const usageRecords = pgTable(
     serviceTier: text("service_tier"),
     workspaceId: text("workspace_id"),
     apiKeyId: text("api_key_id"),
+    project: text("project"),
     sessionId: text("session_id"),
     sourceFile: text("source_file"),
     ingestedAt: timestamp("ingested_at", { withTimezone: true }).notNull().defaultNow(),
@@ -75,6 +76,7 @@ export const usageRecords = pgTable(
     uniqueIndex("usage_records_source_dedupe_idx").on(t.sourceId, t.dedupeKey),
     index("usage_records_day_idx").on(t.dayKey),
     index("usage_records_model_idx").on(t.model),
+    index("usage_records_project_idx").on(t.project),
     index("usage_records_bucket_idx").on(t.bucketStart),
   ],
 );

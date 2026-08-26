@@ -20,10 +20,18 @@ import {
   EmbodiedToggle,
   ModelBars,
   RangeToggle,
+  RankedBars,
   SERIES_COLORS,
   SplitStack,
-  type ModelDatum,
+  type RankedDatum,
 } from "@/components/Panels";
+import {
+  PROVIDERS,
+  VENDOR_LABELS,
+  vendorFromModel,
+  type ProviderSpec,
+  type VendorId,
+} from "@/lib/sources/providers";
 
 /**
  * The dashboard.
@@ -94,7 +102,7 @@ export default async function Page({ searchParams }: PageProps) {
   // lifetime range without dropping data.
   const points: ChartPoint[] = days.length > 90 ? toMonthly(days) : toDaily(days);
 
-  const models: ModelDatum[] = [...byModel.entries()]
+  const models: RankedDatum[] = [...byModel.entries()]
     .map(([name, group], i) => ({
       name,
       ml: group.totalMl.mid,
@@ -105,6 +113,36 @@ export default async function Page({ searchParams }: PageProps) {
     .sort((a, b) => b.ml - a.ml)
     .slice(0, 6);
 
+  // Provider breakdown. Derived from the model name rather than stored, so it
+  // can never drift from soif's own registry — which is what decides the
+  // data-centre preset (Azure vs AWS vs GCP) and therefore the water intensity.
+  const byVendor = estimateGrouped(records, (r) => vendorFromModel(r.model), factors, options);
+  const providers: RankedDatum[] = [...byVendor.entries()]
+    .map(([vendor, group], i) => ({
+      name: VENDOR_LABELS[vendor as VendorId] ?? vendor,
+      ml: group.totalMl.mid,
+      outputTokens: group.outputTokens,
+      cachedTokens: group.cachedTokens,
+      color: SERIES_COLORS[i % SERIES_COLORS.length]!,
+    }))
+    .sort((a, b) => b.ml - a.ml);
+
+  // Project breakdown, from the working directory each call was made in.
+  // Records predating the project column, and API sources that have no notion
+  // of one, are grouped honestly as unattributed rather than dropped.
+  const byProject = estimateGrouped(records, (r) => r.project ?? "\u0000unattributed", factors, options);
+  const projects: RankedDatum[] = [...byProject.entries()]
+    .map(([path, group], i) => ({
+      name: path === "\u0000unattributed" ? "Not attributed" : projectLabel(path),
+      title: path === "\u0000unattributed" ? "Records from sources with no project context" : path,
+      ml: group.totalMl.mid,
+      outputTokens: group.outputTokens,
+      cachedTokens: group.cachedTokens,
+      color: SERIES_COLORS[i % SERIES_COLORS.length]!,
+    }))
+    .sort((a, b) => b.ml - a.ml)
+    .slice(0, 8);
+
   const splits = [
     { name: "Off-site — power generation", ml: totals.offsiteMl.mid, color: "var(--seq-3)" },
     { name: "Embodied — chips & buildings", ml: totals.embodiedMl.mid, color: "var(--seq-2)" },
@@ -114,8 +152,7 @@ export default async function Page({ searchParams }: PageProps) {
   const intensity = litresPerMillionOutputTokens(totals);
   const lever = biggestLever(byModel, factors.registry.models);
   const spread = describeSpread(totals.totalMl);
-  const localSource = sources.find((s) => s.kind === "claude_code_local");
-  const adminSource = sources.find((s) => s.kind === "anthropic_admin");
+  const configuredKinds = new Set(sources.map((s) => s.kind));
   const lastRun = lastRuns[0];
   const geoKnown = records.some(
     (r) => r.inferenceGeo && r.inferenceGeo !== "not_available",
@@ -246,6 +283,28 @@ export default async function Page({ searchParams }: PageProps) {
           </div>
         </div>
 
+        <div className="row k2">
+          <div className="card">
+            <h3>Which projects drank it</h3>
+            <p className="sub">
+              By the working directory each call was made in.
+              {projects.length === 8 ? " Top 8." : ""}
+            </p>
+            <RankedBars
+              items={projects}
+              empty="No project information in this range. Local scans record it; API sources have none."
+            />
+          </div>
+          <div className="card">
+            <h3>Which providers drank it</h3>
+            <p className="sub">
+              Water intensity differs by where a model is served — Azure, AWS and Google&apos;s fleet
+              report WUE figures that span roughly 6x.
+            </p>
+            <RankedBars items={providers} empty="No provider usage in this range." />
+          </div>
+        </div>
+
         <section className="sec">
           <h2>Connected sources</h2>
           <p className="lede">
@@ -254,52 +313,26 @@ export default async function Page({ searchParams }: PageProps) {
           </p>
           <div className="card" style={{ marginTop: 12 }}>
             <div className="src">
-              <SourceCard
-                title="Claude Code (local scan)"
-                state={localSource ? "on" : "idle"}
-                stateLabel={localSource ? "Active" : "Available"}
-              >
-                Reads real per-message usage out of local transcripts. Works on any plan and never
-                leaves the machine.{" "}
-                {localSource ? (
-                  <>
-                    Last scanned{" "}
-                    {localSource.lastSyncedAt
-                      ? new Date(localSource.lastSyncedAt as string | number).toISOString().slice(0, 16).replace("T", " ")
-                      : "never"}
-                    .
-                  </>
-                ) : (
-                  <>
-                    Run <code>npx soif-scan</code>.
-                  </>
-                )}
-              </SourceCard>
-
-              <SourceCard
-                title="Anthropic Admin API"
-                state={adminSource ? "on" : "idle"}
-                stateLabel={adminSource ? "Connected" : "Not configured"}
-              >
-                Real token counts by model, geo and workspace from{" "}
-                <code>/v1/organizations/usage_report/messages</code>. Needs an admin key. Org
-                accounts only.
-              </SourceCard>
-
-              <SourceCard title="Claude Pro / Max personal" state="off" stateLabel="No public API">
-                Individual subscriptions expose no documented usage API, so lifetime history
-                cannot be pulled. Use the local scan instead — it reports the same token counts.
-              </SourceCard>
-
-              <SourceCard
-                title="Inference geography"
-                state={geoKnown ? "on" : "idle"}
-                stateLabel={geoKnown ? "Reported" : "Not available"}
-              >
-                {geoKnown
-                  ? "Real routing is reported, so grid water intensity is measured rather than assumed."
-                  : "This data reports inference_geo as not_available, so the region falls back to each model's default rather than being guessed."}
-              </SourceCard>
+              {PROVIDERS.map((provider) => (
+                <SourceCard
+                  key={provider.kind}
+                  provider={provider}
+                  active={configuredKinds.has(provider.kind)}
+                />
+              ))}
+              <div className="s-item">
+                <div className="s-top">
+                  <h4>Inference geography</h4>
+                  <span className={`pill ${geoKnown ? "y" : "idle"}`}>
+                    {geoKnown ? "Reported" : "Not available"}
+                  </span>
+                </div>
+                <p>
+                  {geoKnown
+                    ? "Real routing is reported, so grid water intensity is measured rather than assumed."
+                    : "This data reports no inference geography, so each model's region falls back to its registry default rather than being guessed."}
+                </p>
+              </div>
             </div>
           </div>
         </section>
@@ -353,26 +386,49 @@ export default async function Page({ searchParams }: PageProps) {
   );
 }
 
-function SourceCard({
-  title,
-  state,
-  stateLabel,
-  children,
-}: {
-  title: string;
-  state: "on" | "off" | "idle";
-  stateLabel: string;
-  children: React.ReactNode;
-}) {
+/**
+ * How well an adapter is actually proven.
+ *
+ * Shown rather than hidden because "supported" means something very different
+ * for a reader that has been run against a real corpus than for one built from
+ * a published schema. An adapter that silently reads zeros is indistinguishable
+ * from a provider you did not use, so the confidence travels with the claim.
+ */
+const VERIFICATION_LABELS: Record<string, string> = {
+  "real-corpus": "Verified against real usage",
+  "vendor-source": "Built from the tool's own source",
+  "fixture-only": "Built from published schema, tested against fixtures",
+};
+
+function SourceCard({ provider, active }: { provider: ProviderSpec; active: boolean }) {
+  const state: "on" | "off" | "idle" =
+    provider.status === "unreadable" ? "off" : provider.status === "planned" ? "idle" : active ? "on" : "idle";
+  const label =
+    provider.status === "unreadable"
+      ? "No public API"
+      : provider.status === "planned"
+        ? "Not built yet"
+        : active
+          ? "Active"
+          : provider.transport === "local"
+            ? "Available"
+            : "Not configured";
+
   return (
     <div className="s-item">
       <div className="s-top">
-        <h4>{title}</h4>
+        <h4>{provider.label}</h4>
         <span className={`pill ${state === "on" ? "y" : state === "off" ? "n" : "idle"}`}>
-          {stateLabel}
+          {label}
         </span>
       </div>
-      <p>{children}</p>
+      <p>{provider.description}</p>
+      {provider.verification && (
+        <p className="s-note">
+          {VERIFICATION_LABELS[provider.verification] ?? provider.verification}
+          {provider.verifiedFrom ? ` — ${provider.verifiedFrom}` : ""}
+        </p>
+      )}
     </div>
   );
 }
@@ -452,19 +508,29 @@ function toMonthly(days: Array<[string, AggregateTotals]>): ChartPoint[] {
 }
 
 /**
- * The cheapest real saving available: usage on a model one tier above what the
- * registry says a lighter sibling from the same family would have cost.
+ * The cheapest real saving available: usage on a heavy model where a lighter
+ * sibling was already answering the same kind of work.
  *
- * Returns null rather than inventing a lever when there is nothing to say. A
- * dashboard that always finds a "biggest lever" is one that will eventually
- * fabricate one.
+ * This is the one figure on the page derived from a counterfactual rather than
+ * measured, so it is deliberately hard to satisfy:
+ *
+ *  - **Same vendor only.** Comparing `claude-opus` against `gemini-2.5-pro`
+ *    conflates a model-tier difference with a data-centre one — Google's fleet
+ *    WUE is ~6x AWS's — so the "saving" would be mostly geography, not choice.
+ *  - **The lighter model needs real usage.** Deriving an intensity from a
+ *    handful of calls and then projecting it across millions of tokens produces
+ *    a confident number from almost no evidence. It once claimed 67% of total
+ *    water against a model with 42 mL of usage.
+ *  - **Returns null when there is nothing to say.** A dashboard that always
+ *    finds a lever is one that will eventually invent one.
  */
 function biggestLever(
   byModel: Map<string, AggregateTotals>,
   registry: ReadonlyArray<{ match: string; tier: string }>,
 ): { from: string; to: string; savedMl: number; sharePct: string } | null {
   const total = [...byModel.values()].reduce((sum, g) => sum + g.totalMl.mid, 0);
-  if (total <= 0) return null;
+  const totalOutput = [...byModel.values()].reduce((sum, g) => sum + g.outputTokens, 0);
+  if (total <= 0 || totalOutput <= 0) return null;
 
   const tierRank = new Map(["nano", "small", "medium", "large", "frontier"].map((t, i) => [t, i]));
   const tierOf = (model: string) => {
@@ -478,31 +544,37 @@ function biggestLever(
     return best?.tier ?? null;
   };
 
-  // The heaviest model in use, and the lightest one already in use below it —
-  // a comparison grounded in this account's own behaviour rather than a
-  // hypothetical model it has never called.
+  /** A lighter model needs at least this share of output tokens to be evidence. */
+  const MIN_SHARE = 0.01;
+
   const used = [...byModel.entries()]
-    .map(([name, group]) => ({ name, group, rank: tierRank.get(tierOf(name) ?? "") ?? -1 }))
-    .filter((m) => m.rank >= 0);
+    .map(([name, group]) => ({
+      name,
+      group,
+      rank: tierRank.get(tierOf(name) ?? "") ?? -1,
+      vendor: vendorFromModel(name),
+      intensity: group.outputTokens > 0 ? group.totalMl.mid / group.outputTokens : 0,
+    }))
+    .filter((m) => m.rank >= 0 && m.intensity > 0);
   if (used.length < 2) return null;
 
   const heaviest = used.reduce((a, b) => (b.group.totalMl.mid > a.group.totalMl.mid ? b : a));
-  const lighter = used
-    .filter((m) => m.rank < heaviest.rank)
-    .sort((a, b) => b.rank - a.rank)[0];
+
+  // Same vendor, lighter tier, and enough usage of its own to mean something.
+  const candidates = used
+    .filter(
+      (m) =>
+        m.vendor === heaviest.vendor &&
+        m.rank < heaviest.rank &&
+        m.group.outputTokens / totalOutput >= MIN_SHARE &&
+        m.intensity < heaviest.intensity,
+    )
+    .sort((a, b) => b.rank - a.rank);
+
+  const lighter = candidates[0];
   if (!lighter) return null;
 
-  // Water scales with tier energy, so the saving is the share of the heavy
-  // model's water that the lighter tier would not have spent.
-  const lighterIntensity = lighter.group.outputTokens > 0
-    ? lighter.group.totalMl.mid / lighter.group.outputTokens
-    : 0;
-  const heavyIntensity = heaviest.group.outputTokens > 0
-    ? heaviest.group.totalMl.mid / heaviest.group.outputTokens
-    : 0;
-  if (lighterIntensity <= 0 || heavyIntensity <= lighterIntensity) return null;
-
-  const savedMl = (heavyIntensity - lighterIntensity) * heaviest.group.outputTokens;
+  const savedMl = (heaviest.intensity - lighter.intensity) * heaviest.group.outputTokens;
   if (savedMl <= 0) return null;
 
   return {
@@ -536,11 +608,25 @@ function describeSources(sources: SourceRow[]): string {
 
 const SOURCE_KIND_LABELS: Record<string, string> = {
   claude_code_local: "local scan",
+  codex_local: "Codex",
   anthropic_admin: "Anthropic Admin API",
   openai_admin: "OpenAI org usage",
   claude_enterprise: "Claude Enterprise",
   csv: "CSV import",
 };
+
+/**
+ * Shorten a working directory to something readable in a bar label.
+ *
+ * The last two path segments are usually enough to identify a project while
+ * staying distinguishable — `dev/soif-app` rather than the whole home path —
+ * and the full path stays available on hover.
+ */
+function projectLabel(path: string): string {
+  const parts = path.split(/[/\\]/).filter(Boolean);
+  if (parts.length === 0) return path;
+  return parts.slice(-2).join("/");
+}
 
 /** Split "531 L" into ["531", "L"] so the unit can be styled down. */
 function splitMeasure(text: string): [string, string] {

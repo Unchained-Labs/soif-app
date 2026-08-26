@@ -71,6 +71,15 @@ export interface ScanOptions {
    * between a scan and a stall, since only ~37% of lines carry usage at all.
    */
   requireAll?: readonly string[];
+  /**
+   * Alternative prefilter: keep a line if it contains *any* of these.
+   *
+   * Needed by formats where the interesting records are several distinct kinds
+   * — a Codex rollout carries the model on one record type and the usage on
+   * another, so an AND filter silently drops the context and every row comes
+   * out unattributed. Applied in addition to `requireAll` when both are given.
+   */
+  requireAny?: readonly string[];
   signal?: AbortSignal;
 }
 
@@ -89,6 +98,7 @@ export async function scanJsonl(
   const maxLineBytes = options.maxLineBytes ?? DEFAULT_MAX_LINE_BYTES;
   const startOffset = Math.max(0, options.offset ?? 0);
   const needles = (options.requireAll ?? []).map((s) => Buffer.from(s, "utf8"));
+  const anyNeedles = (options.requireAny ?? []).map((s) => Buffer.from(s, "utf8"));
 
   let handle: FileHandle | undefined;
   const result: ScanResult = {
@@ -160,13 +170,14 @@ export async function scanJsonl(
         if (lineOverflowed || totalBytes > maxLineBytes) {
           result.linesSkippedTooLong += 1;
           const judged = head.length > 0 ? head : slice.subarray(0, PREFILTER_HEAD_BYTES);
-          if (needles.length === 0 || matchesAny(judged, needles)) {
+          const filters = [...needles, ...anyNeedles];
+          if (filters.length === 0 || matchesAny(judged, filters)) {
             result.linesSkippedPossiblyRelevant += 1;
           }
         } else {
           const line =
             carry.length === 0 ? slice : Buffer.concat([...carry, Buffer.from(slice)], totalBytes);
-          if (line.length > 0 && matchesAll(line, needles)) {
+          if (line.length > 0 && matchesAll(line, needles) && matchesAnyOrEmpty(line, anyNeedles)) {
             result.linesRead += 1;
             onLine({ bytes: line, startOffset: lineStart, endOffset: lineEnd });
           }
@@ -207,6 +218,11 @@ function matchesAll(line: Buffer, needles: readonly Buffer[]): boolean {
  * (`"usage"`) sits past the retained head, so requiring all of them would call
  * every skip harmless. Over-reporting a possible loss is the safe direction.
  */
+/** `requireAny` semantics: an empty list means "no constraint", not "match nothing". */
+function matchesAnyOrEmpty(line: Buffer, needles: readonly Buffer[]): boolean {
+  return needles.length === 0 || matchesAny(line, needles);
+}
+
 function matchesAny(head: Buffer, needles: readonly Buffer[]): boolean {
   for (const needle of needles) {
     if (head.indexOf(needle) !== -1) return true;

@@ -51,6 +51,8 @@ export interface ClaudeUsageRow {
   inferenceGeo: string | null;
   serviceTier: string | null;
   isSidechain: boolean;
+  /** Working directory the call was made from, from the transcript's `cwd`. */
+  project: string | null;
   /** Transcripts under a `subagents/` path win ties against parent transcripts. */
   pathRole: "parent" | "subagent";
   sourceFile: string;
@@ -134,6 +136,7 @@ export async function parseTranscript(
         inferenceGeo: asString(usage.inference_geo) ?? null,
         serviceTier: asString(usage.service_tier) ?? null,
         isSidechain: record.isSidechain === true,
+        project: asString(record.cwd) ?? null,
         pathRole,
         sourceFile: path,
         fromIterations: counts.fromIterations,

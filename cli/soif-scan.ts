@@ -16,6 +16,9 @@ import { closeDatabase, getDatabase } from "@/lib/db/client";
 import { Repository } from "@/lib/db/repository";
 import { ingestLocalScan, type IngestWarnings } from "@/lib/scan/ingest";
 import { discoverRoots } from "@/lib/scan/roots";
+import { discoverCodexRoots } from "@/lib/scan/codex";
+import { discoverSpecRoots } from "@/lib/scan/local-spec";
+import { LOCAL_SCAN_SPECS } from "@/lib/scan/specs";
 import { loadFactors } from "@/lib/soif/factors";
 import {
   estimateAll,
@@ -35,6 +38,9 @@ import {
 } from "@/lib/format";
 
 interface Options {
+  importCsvPath: string | null;
+  csvConvention: "disjoint" | "inclusive";
+  csvModel: string | null;
   full: boolean;
   json: boolean;
   quiet: boolean;
@@ -48,6 +54,9 @@ interface Options {
 
 function parseArgs(argv: string[]): Options | "help" {
   const options: Options = {
+    importCsvPath: null,
+    csvConvention: "disjoint",
+    csvModel: null,
     full: false,
     json: false,
     quiet: false,
@@ -83,6 +92,19 @@ function parseArgs(argv: string[]): Options | "help" {
       case "--root":
         options.roots.push(requireValue(argv, ++i, arg));
         break;
+      case "--import":
+        options.importCsvPath = requireValue(argv, i + 1, arg);
+        i++;
+        break;
+      case "--csv-inclusive-input":
+        // OpenAI-style exports, where the input column already contains the
+        // cached tokens. Getting this wrong is a 10x error, so it is explicit.
+        options.csvConvention = "inclusive";
+        break;
+      case "--csv-model":
+        options.csvModel = requireValue(argv, i + 1, arg);
+        i++;
+        break;
       case "--since":
         options.since = requireValue(argv, i + 1, arg);
         i++;
@@ -115,6 +137,11 @@ Usage:
 
 Options:
   --root <path>     Scan this config or projects dir (repeatable). Default: discover.
+  --import <file>   Import a usage CSV instead of scanning (any provider).
+  --csv-inclusive-input
+                    The CSV's input column already includes cached tokens
+                    (OpenAI-style). Omit for Anthropic-style disjoint columns.
+  --csv-model <id>  Model to assume for CSV rows with no model column.
   --full            Ignore stored cursors and re-read every transcript.
   --since <date>    Only report days >= YYYY-MM-DD.
   --until <date>    Only report days <= YYYY-MM-DD.
@@ -145,12 +172,29 @@ async function main(): Promise<number> {
     if (!options.quiet && !options.json) process.stderr.write(`${message}\n`);
   };
 
+  if (options.importCsvPath) {
+    return importCsvFile(options, log);
+  }
+
   const roots = await discoverRoots(options.roots.length > 0 ? { explicit: options.roots } : {});
-  if (roots.length === 0) {
+
+  // "No Claude transcripts" is not "nothing to scan". A machine may run Codex,
+  // Gemini CLI or Qwen Code and no Claude at all, and bailing here would report
+  // zero water for someone with plenty of usage.
+  const otherRoots =
+    options.roots.length > 0
+      ? 0
+      : (await discoverCodexRoots()).length +
+        (
+          await Promise.all(LOCAL_SCAN_SPECS.map((spec) => discoverSpecRoots(spec)))
+        ).reduce((a, r) => a + r.length, 0);
+
+  if (roots.length === 0 && otherRoots === 0) {
     process.stderr.write(
-      "No Claude Code transcripts found.\n" +
-        "Looked for a projects/ directory under $CLAUDE_CONFIG_DIR, ~/.claude and ~/.config/claude.\n" +
-        "Point at one explicitly with --root <path>.\n",
+      "No local AI tool usage found.\n" +
+        "Looked for Claude Code (~/.claude, ~/.config/claude, $CLAUDE_CONFIG_DIR), " +
+        "Codex (~/.codex, $CODEX_HOME),\nGemini CLI (~/.gemini) and Qwen Code (~/.qwen).\n" +
+        "Point at a directory explicitly with --root <path>, or import a CSV with --import.\n",
     );
     return 1;
   }
@@ -188,8 +232,9 @@ async function main(): Promise<number> {
     factorsVersion: factors.factors_version,
     includeEmbodied: options.includeEmbodied,
     scannedRoots: results.map((r) => ({
-      path: r.root.path,
-      account: r.root.account?.emailAddress ?? null,
+      path: r.rootPath,
+      kind: r.kind,
+      account: accountLabel(r.account),
       filesScanned: r.filesScanned,
       bytesScanned: r.bytesScanned,
       rowsParsed: r.rowsParsed,
@@ -231,6 +276,7 @@ export interface ScanPayload {
   includeEmbodied: boolean;
   scannedRoots: Array<{
     path: string;
+    kind: string;
     account: string | null;
     filesScanned: number;
     bytesScanned: number;
@@ -253,7 +299,8 @@ function printReport(payload: ScanPayload, recordCount: number, options: Options
   out(`  ${"─".repeat(58)}`);
   for (const root of payload.scannedRoots) {
     const who = root.account ? ` · ${root.account}` : "";
-    out(`  ${root.path}${who}`);
+    const provider = PROVIDER_SHORT[root.kind] ?? root.kind;
+    out(`  [${provider}] ${root.path}${who}`);
     out(
       `    ${root.filesScanned} files, ${(root.bytesScanned / 1e6).toFixed(0)} MB new, ` +
         `${root.rowsParsed.toLocaleString()} rows (${root.rowsCollapsed} deduped)`,
@@ -310,6 +357,85 @@ function printReport(payload: ScanPayload, recordCount: number, options: Options
   out();
   out(`  Estimates, not measurements. Full method: METHODOLOGY.md in Unchained-Labs/soif`);
   out();
+}
+
+/** Short provider names for the scan report. */
+const PROVIDER_SHORT: Record<string, string> = {
+  claude_code_local: "Claude Code",
+  codex_local: "Codex",
+  gemini_cli_local: "Gemini CLI",
+  qwen_code_local: "Qwen Code",
+};
+
+/**
+ * Import a usage CSV from any provider.
+ *
+ * The universal path: a billing export, a spreadsheet, a query result. It is
+ * the only source that covers vendors with no local CLI and no admin API, so it
+ * carries the multi-provider story wherever a bespoke adapter does not reach.
+ */
+async function importCsvFile(options: Options, log: (m: string) => void): Promise<number> {
+  const { readFile } = await import("node:fs/promises");
+  const { importCsv } = await import("@/lib/sources/csv");
+
+  const text = await readFile(options.importCsvPath!, "utf8");
+  const factors = loadFactors();
+  const handle = await getDatabase(options.dryRun ? "file::memory:" : undefined);
+  const repository = new Repository(handle);
+  await repository.recordFactorSet(factors);
+
+  const label = options.importCsvPath!;
+  const existing = await repository.findSource("csv", label);
+  const sourceId = await repository.upsertSource({ id: existing?.id, kind: "csv", label });
+
+  const result = importCsv(text, {
+    sourceId,
+    inputConvention: options.csvConvention,
+    defaultModel: options.csvModel ?? undefined,
+  });
+
+  const inserted = await repository.insertUsageRecords(result.records);
+  const { totals } = estimateAll(result.records, factors, {
+    includeEmbodied: options.includeEmbodied,
+  });
+  await closeDatabase();
+
+  log(`columns: ${JSON.stringify(result.columnsUsed)}`);
+  process.stdout.write(
+    `\n  Imported ${result.records.length} rows (${inserted} new) from ${label}\n` +
+      `  Vendors: ${result.vendors.join(", ") || "none"}\n` +
+      `  Water:   ${formatTriple(totals.totalMl)}\n`,
+  );
+  if (result.skipped.length > 0) {
+    // Every skipped row is named: a silent drop in an import is
+    // indistinguishable from usage that never happened.
+    process.stderr.write(`\n  ${result.skipped.length} row(s) skipped:\n`);
+    for (const skip of result.skipped.slice(0, 10)) {
+      process.stderr.write(`    line ${skip.line}: ${skip.reason}\n`);
+    }
+    if (result.skipped.length > 10) {
+      process.stderr.write(`    … and ${result.skipped.length - 10} more\n`);
+    }
+  }
+  process.stdout.write("\n");
+  return 0;
+}
+
+/**
+ * A display label for a source's account, from whatever identity it exposes.
+ *
+ * Providers name their account differently — Claude has an email and an org,
+ * Codex has an email and a plan — so this reads the fields that exist rather
+ * than assuming one shape. Never touches a token.
+ */
+function accountLabel(account: object | null): string | null {
+  if (!account) return null;
+  const fields = account as Record<string, unknown>;
+  for (const key of ["emailAddress", "email", "organizationName", "accountId", "accountUuid"]) {
+    const value = fields[key];
+    if (typeof value === "string" && value) return value;
+  }
+  return null;
 }
 
 /** POST aggregates to a self-hosted instance. Token counts only — never content. */
