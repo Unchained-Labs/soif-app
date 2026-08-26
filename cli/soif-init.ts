@@ -31,6 +31,8 @@ import { loadFactors } from "@/lib/soif/factors";
 import { estimateAll } from "@/lib/pipeline/estimate-records";
 import { formatWater, vesselState } from "@/lib/format";
 import { PROVIDERS, type ProviderSpec } from "@/lib/sources/providers";
+import { spawn, type ChildProcess } from "node:child_process";
+import { createConnection, createServer } from "node:net";
 
 const ENV_PATH = resolve(process.cwd(), ".env");
 
@@ -38,6 +40,11 @@ interface Options {
   yes: boolean;
   dryRun: boolean;
   skipScan: boolean;
+  /** Build and serve the dashboard when setup finishes, instead of printing a command. */
+  serve: boolean;
+  /** Open the dashboard in a browser once it is listening. */
+  open: boolean;
+  port: number;
 }
 
 const HELP = `soif init — set up soif-app on this machine
@@ -50,9 +57,12 @@ What it does, in order:
   2. Writes .env with a freshly generated encryption key (never overwrites one).
   3. Creates the database and applies migrations.
   4. Scans every detected local provider.
-  5. Prints what it found and how to open the dashboard.
+  5. Builds the dashboard and serves it (with --serve).
 
 Options:
+  --serve       Build and serve the dashboard when setup finishes.
+  --port <n>    Port for --serve (default 3000).
+  --no-open     With --serve, do not open a browser.
   --yes         Do not prompt; accept every safe default.
   --skip-scan   Set up, but do not scan yet.
   --dry-run     Show the plan and change nothing.
@@ -60,9 +70,32 @@ Options:
 `;
 
 function parseArgs(argv: string[]): Options | "help" {
-  const options: Options = { yes: false, dryRun: false, skipScan: false };
-  for (const arg of argv) {
+  const options: Options = {
+    yes: false,
+    dryRun: false,
+    skipScan: false,
+    serve: false,
+    open: true,
+    port: 3000,
+  };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
     switch (arg) {
+      case "--serve":
+        options.serve = true;
+        break;
+      case "--no-open":
+        options.open = false;
+        break;
+      case "--port": {
+        const value = argv[++i];
+        const port = Number(value);
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+          throw new Error(`--port needs a number between 1 and 65535, got "${value ?? ""}"`);
+        }
+        options.port = port;
+        break;
+      }
       case "-h":
       case "--help":
         return "help";
@@ -217,6 +250,155 @@ function loadEnv(): void {
   }
 }
 
+// -- serve -------------------------------------------------------------------
+
+/** Run a command, inheriting stdio, and resolve on a clean exit. */
+function run(command: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: "inherit", shell: process.platform === "win32" });
+    child.on("error", reject);
+    child.on("exit", (code) =>
+      code === 0 ? resolve() : reject(new Error(`${command} ${args[0] ?? ""} exited with ${code}`)),
+    );
+  });
+}
+
+/** Best-effort browser open. Never fatal: a headless box is a normal place to run this. */
+function openBrowser(url: string): void {
+  const opener =
+    process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+  try {
+    const child = spawn(opener, [url], {
+      stdio: "ignore",
+      detached: true,
+      shell: process.platform === "win32",
+    });
+    child.on("error", () => {});
+    child.unref();
+  } catch {
+    // No browser, no problem — the URL is printed either way.
+  }
+}
+
+/**
+ * Poll until the server accepts connections, so the browser is not opened at a
+ * dead port.
+ *
+ * A raw TCP connect rather than an HTTP request, for two reasons found the hard
+ * way: `fetch` honours proxy environment variables and will happily try to
+ * reach your own localhost through a corporate proxy, and Node resolves
+ * `localhost` to ::1 first while the server binds IPv4. Either one leaves the
+ * wizard waiting out the full timeout on a server that came up immediately.
+ * "Is something accepting connections on this port" is the actual question.
+ */
+function waitForServer(port: number, timeoutMs = 60_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+
+  const attempt = (): Promise<boolean> =>
+    new Promise((resolve) => {
+      const socket = createConnection({ port, host: "127.0.0.1" });
+      const done = (result: boolean) => {
+        socket.destroy();
+        resolve(result);
+      };
+      socket.setTimeout(1_500);
+      socket.once("connect", () => done(true));
+      socket.once("timeout", () => done(false));
+      socket.once("error", () => done(false));
+    });
+
+  return (async () => {
+    while (Date.now() < deadline) {
+      if (await attempt()) return true;
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    return false;
+  })();
+}
+
+/**
+ * Is the port free?
+ *
+ * Checked up front because Next quietly starts on a *different* port when the
+ * requested one is taken. The wizard would then print a URL nobody is serving,
+ * which is a worse failure than refusing to start.
+ */
+function portAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const probe = createServer();
+    probe.once("error", () => resolve(false));
+    probe.once("listening", () => probe.close(() => resolve(true)));
+    probe.listen(port, "0.0.0.0");
+  });
+}
+
+/**
+ * Build the dashboard and serve it, replacing "here is a command to run next"
+ * with a URL that already works.
+ *
+ * The build runs every time rather than being skipped when `.next` exists:
+ * Next caches aggressively so a warm rebuild is seconds, and serving a stale
+ * bundle after a factor-set or schema change would show numbers that no longer
+ * match the database.
+ */
+async function serve(options: Options): Promise<number> {
+  const local = (bin: string) => `./node_modules/.bin/${bin}`;
+
+  if (!(await portAvailable(options.port))) {
+    out();
+    warn(`Port ${options.port} is already in use.`);
+    info(`Pick another: ${cyan(`npx soif-init --serve --port ${options.port + 1}`)}`);
+    out();
+    return 1;
+  }
+
+  out();
+  info("Building the dashboard…");
+  await run(local("next"), ["build"]);
+
+  const url = `http://localhost:${options.port}`;
+  const server: ChildProcess = spawn(local("next"), ["start", "-p", String(options.port)], {
+    stdio: ["ignore", "inherit", "inherit"],
+    shell: process.platform === "win32",
+  });
+
+  // A server that dies immediately (port in use, say) should not leave the
+  // wizard waiting sixty seconds for a browser that will never load.
+  let exited: number | null = null;
+  server.on("exit", (code) => {
+    exited = code ?? 0;
+  });
+
+  const shutdown = () => {
+    if (!server.killed) server.kill("SIGTERM");
+  };
+  process.on("SIGINT", () => {
+    shutdown();
+    process.exit(0);
+  });
+  process.on("SIGTERM", shutdown);
+
+  const ready = await waitForServer(options.port);
+  if (exited !== null) {
+    warn("The server exited before it started listening. See the output above.");
+    return 1;
+  }
+  if (!ready) {
+    warn(`Server did not answer at ${url} within 60s. It may still be starting.`);
+  }
+
+  out();
+  ok(`Dashboard running at ${cyan(url)}`);
+  info("Press Ctrl+C to stop.");
+  out();
+  if (options.open && ready) openBrowser(url);
+
+  // Hand the terminal to the server; the wizard is done but the process stays
+  // alive so Ctrl+C reaches the thing the user is actually watching.
+  await new Promise<void>((resolve) => server.on("exit", () => resolve()));
+  return 0;
+}
+
 // -- main --------------------------------------------------------------------
 
 async function main(): Promise<number> {
@@ -294,6 +476,7 @@ async function main(): Promise<number> {
 
   if (options.skipScan || options.dryRun) {
     await closeDatabase();
+    if (options.serve && !options.dryRun) return serve(options);
     out();
     out(`  ${bold("Next:")} ${cyan("npx soif-scan")} then ${cyan("npm run build && npm start")}`);
     out();
@@ -352,10 +535,13 @@ async function main(): Promise<number> {
   out(`  ${dim(`range ${formatWater(totals.totalMl.low)} – ${formatWater(totals.totalMl.high)} · mid scenario`)}`);
   out(`  ${dim(`that is ${state.filled.toFixed(1)} of five ${state.tier.unit}s`)}`);
   out();
+  out(`  ${dim("Estimates, not measurements. Every figure carries a range.")}`);
+
+  if (options.serve) return serve(options);
+
+  out();
   out(`  ${bold("Open the dashboard:")}`);
   out(`    ${cyan("npm run build && npm start")}   ${dim("→ http://localhost:3000")}`);
-  out();
-  out(`  ${dim("Estimates, not measurements. Every figure carries a range.")}`);
   out();
   return 0;
 }

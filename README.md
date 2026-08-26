@@ -15,15 +15,40 @@ Third repo in the soif project:
 > [`METHODOLOGY.md`](https://github.com/Unchained-Labs/soif/blob/main/METHODOLOGY.md) before
 > quoting anything.
 
+<a href="https://github.com/Unchained-Labs/soif-app/raw/main/docs/promo/soif-promo.mp4">
+  <img src="docs/promo/poster.jpg" width="100%"
+       alt="soif — 37 second demo: the install wizard typing itself out, the vessel ladder filling, and the live dashboard on 21,836 real records">
+</a>
+
+<p align="center"><em>37 second demo &nbsp;·&nbsp; real wizard output and the live app, not mockups &nbsp;·&nbsp;
+<a href="https://github.com/Unchained-Labs/soif-app/raw/main/docs/promo/soif-promo.mp4">Play&nbsp;▸</a></em></p>
+
 ## Quick start
 
+One line, from nothing to a running dashboard:
+
 ```bash
-npm run setup
+curl -fsSL https://raw.githubusercontent.com/Unchained-Labs/soif-app/main/scripts/install.sh | bash
 ```
 
-That is the whole thing. The wizard detects which AI tools on this machine have readable usage,
-generates an encryption key, creates the database, scans everything it found, and tells you what
-it cost:
+Piping a remote script into a shell means trusting whatever that URL serves. If you would rather
+not — and that is a reasonable position — the two-line form does the same thing and lets you read
+it first:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/Unchained-Labs/soif-app/main/scripts/install.sh
+less install.sh && bash install.sh
+```
+
+Already cloned?
+
+```bash
+npm run setup     # install, set up, scan, build, serve
+```
+
+Either way the wizard detects which AI tools on this machine have readable usage, generates an
+encryption key, creates the database, scans everything it found, tells you what it cost, and
+leaves the dashboard running on <http://localhost:3000>:
 
 ```
 [1/5] Looking for AI tools with readable usage
@@ -38,16 +63,15 @@ it cost:
   range 44.8 L – 6,232 L · mid scenario
 ```
 
-Then open the dashboard:
-
-```bash
-npm run build && npm start   # http://localhost:3000
-```
-
 No infrastructure, no credential, nothing leaves the machine. It works on **any plan, including
 personal Pro/Max**, which have no usage API at all.
 
-`npx soif-init --dry-run` shows what it would do; `--yes` skips the prompts for scripted installs.
+```bash
+npm run setup:only            # set up and scan, but do not serve
+npx soif-init --dry-run       # show the plan, change nothing
+npx soif-init --serve --port 4000
+npx soif-init --yes --no-open # scripted installs
+```
 
 To run it somewhere shared, with Postgres:
 
