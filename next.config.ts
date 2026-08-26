@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
   // image loader.
   reactStrictMode: true,
   serverExternalPackages: ["better-sqlite3", "postgres"],
+  // Pin the trace root to this package. Without it Next walks up and finds an
+  // unrelated lockfile in the home directory, and the standalone output traces
+  // the wrong tree.
+  outputFileTracingRoot: import.meta.dirname,
 };
 
 export default nextConfig;

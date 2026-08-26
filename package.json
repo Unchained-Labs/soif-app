@@ -15,7 +15,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint .",
+    "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -36,6 +36,7 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.6",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.6.2",
     "@types/react": "^19.1.16",

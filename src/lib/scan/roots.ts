@@ -40,7 +40,9 @@ export interface AccountIdentity {
 }
 
 export interface DiscoverOptions {
-  env?: NodeJS.ProcessEnv;
+  /** Loose on purpose: callers pass partial environments, and requiring the
+   * full NodeJS.ProcessEnv shape would force every test to invent a NODE_ENV. */
+  env?: Record<string, string | undefined>;
   home?: string;
   /** Explicit roots, e.g. from `--root`. When given, discovery is skipped. */
   explicit?: readonly string[];

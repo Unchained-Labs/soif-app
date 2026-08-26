@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import bundledFactors from "../../../factors.json";
 import { SoifError, type FactorSet } from "./types";
 
 /**
@@ -86,35 +86,46 @@ export function parseFactorSet(json: string, origin = "factors.json"): FactorSet
 }
 
 /**
- * Resolve the vendored `factors.json`.
+ * A path override, when the operator has pinned one.
  *
- * `SOIF_FACTORS_PATH` overrides it, which is how a self-hosted operator pins a
- * specific factor set (e.g. one downloaded from a soif release) without
- * rebuilding the image.
+ * `SOIF_FACTORS_PATH` is how a self-hosted deployment pins a specific factor
+ * set — one downloaded from a `soif` release, say — without rebuilding.
  */
-export function factorsPath(): string {
-  const override = process.env.SOIF_FACTORS_PATH;
-  if (override) return override;
-  // Resolved relative to the package root rather than this module, so it works
-  // the same from `next build` output, `tsx`, and the bundled CLI.
-  const require = createRequire(import.meta.url);
-  return require.resolve("../../../factors.json");
+export function factorsPath(): string | null {
+  return process.env.SOIF_FACTORS_PATH?.trim() || null;
 }
 
-/** Load the factor set, memoised for the process lifetime. */
+/**
+ * Load the factor set, memoised for the process lifetime.
+ *
+ * The vendored `factors.json` is imported statically rather than read from
+ * disk. Bundlers rewrite `require.resolve` into an internal module id, so a
+ * path-based load works under `tsx` and then fails in the production build —
+ * and a dashboard that cannot find its factors is a dashboard that cannot show
+ * a number. Importing it makes the factor set part of the artifact.
+ */
 export function loadFactors(): FactorSet {
   if (cached) return cached;
+
   const path = factorsPath();
-  let raw: string;
-  try {
-    raw = readFileSync(path, "utf8");
-  } catch (error) {
-    throw new SoifError(
-      `Could not read factors.json at ${path}. ` +
-        `Run \`npm run sync:factors\` or set SOIF_FACTORS_PATH. (${(error as Error).message})`,
-    );
+  if (path) {
+    let raw: string;
+    try {
+      raw = readFileSync(path, "utf8");
+    } catch (error) {
+      throw new SoifError(
+        `SOIF_FACTORS_PATH is set to ${path} but it could not be read (${(error as Error).message}). ` +
+          "Unset it to use the bundled factor set.",
+      );
+    }
+    cached = parseFactorSet(raw, path);
+    return cached;
   }
-  cached = parseFactorSet(raw, path);
+
+  // Re-validated rather than trusted: the vendored file is synced from the
+  // soif repo by a script, and a partial sync should fail loudly here.
+  assertShape(bundledFactors, "bundled factors.json");
+  cached = Object.freeze(bundledFactors as FactorSet);
   return cached;
 }
 

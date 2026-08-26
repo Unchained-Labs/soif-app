@@ -1,0 +1,44 @@
+# `docker compose up` runs the dashboard with Postgres.
+#
+# For a single developer doing a local transcript scan, none of this is needed:
+# `npm run db:migrate && npx soif-scan` uses SQLite and no services at all.
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: soif
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-soif}
+      POSTGRES_DB: soif
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U soif -d soif"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Not published: only the app needs to reach it, and an admin-key store
+    # should not be exposed on the host by default.
+    expose:
+      - "5432"
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://soif:${POSTGRES_PASSWORD:-soif}@db:5432/soif
+      # Required. Generate with:
+      #   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+      SOIF_ENCRYPTION_KEY: ${SOIF_ENCRYPTION_KEY:?set SOIF_ENCRYPTION_KEY in .env}
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      # The host's Claude Code transcripts, read-only, so the container can run
+      # a local scan without any ability to modify them.
+      - ${CLAUDE_CONFIG_DIR:-~/.claude}:/transcripts/.claude:ro
+    command: sh -c "npm run db:migrate && npm run start"
+
+volumes:
+  db-data:

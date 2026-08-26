@@ -143,8 +143,8 @@ export function accumulate(
 }
 
 /** Estimate a batch and return per-record results alongside the total. */
-export function estimateAll(
-  records: readonly UsageLike[],
+export function estimateAll<T extends UsageLike>(
+  records: readonly T[],
   factors: FactorSet,
   options: EstimateOptions = {},
 ): { estimates: WaterEstimate[]; totals: AggregateTotals } {
@@ -158,10 +158,16 @@ export function estimateAll(
   return { estimates: results, totals };
 }
 
-/** Group records by a key, estimating each group. Used for by-day and by-model views. */
-export function estimateGrouped<K extends string>(
-  records: readonly UsageLike[],
-  keyOf: (record: UsageLike) => K,
+/**
+ * Group records by a key, estimating each group. Used for by-day and by-model views.
+ *
+ * Generic over the record type so callers can group by fields the estimator
+ * itself does not need — `dayKey`, `sessionId`, a source label — without
+ * widening `UsageLike` to carry presentation concerns.
+ */
+export function estimateGrouped<T extends UsageLike, K extends string>(
+  records: readonly T[],
+  keyOf: (record: T) => K,
   factors: FactorSet,
   options: EstimateOptions = {},
 ): Map<K, AggregateTotals> {

@@ -12,3 +12,4 @@ data/
 .vitest/
 coverage/
 .DS_Store
+tsconfig.tsbuildinfo

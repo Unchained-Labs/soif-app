@@ -1,0 +1,952 @@
+/*
+ * Design tokens and layout, ported from the published soif mockup.
+ *
+ * Theme handling follows the three-state rule: the complete light palette lives
+ * on bare `:root`, the dark overrides are declared twice — once under
+ * `prefers-color-scheme` guarded against an explicit light choice, once under
+ * `[data-theme="dark"]` — so an explicit toggle wins in both directions and the
+ * system default still works. No colour is defined *only* inside a media query.
+ */
+
+:root {
+  --page: #eff4f6;
+  --surface: #ffffff;
+  --surface-2: #f6fafb;
+  --line: #dce6ea;
+  --line-strong: #c3d3da;
+
+  --ink: #0a222d;
+  --ink-2: #3d5c6b;
+  --muted: #6a8593;
+
+  --water: #0e7fb8;
+  --water-deep: #0a5a85;
+  --water-wash: #dcedf6;
+
+  /* Categorical series, validated for light, dark and colour-vision deficiency. */
+  --s1: #1e7fb8;
+  --s2: #3f8f2e;
+  --s3: #8c5ac8;
+  --s4: #c2760a;
+
+  /* Sequential ramp, for parts of a whole. */
+  --seq-1: #9fcbe4;
+  --seq-2: #3d94c4;
+  --seq-3: #0a5a85;
+
+  --ok-bg: #e1f0e6;
+  --ok-ink: #1f6438;
+  --ok-line: #b8dcc5;
+  --no-bg: #f6e6e9;
+  --no-ink: #8c2f42;
+  --no-line: #e4c3cb;
+
+  --glass: rgba(10, 90, 133, 0.1);
+  --shadow: 0 1px 2px rgba(10, 34, 45, 0.05), 0 8px 24px -12px rgba(10, 34, 45, 0.18);
+  --radius: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #08161e;
+    --surface: #0f2530;
+    --surface-2: #143040;
+    --line: #20404f;
+    --line-strong: #2e5566;
+
+    --ink: #e6f1f5;
+    --ink-2: #a9c4cf;
+    --muted: #7e9daa;
+
+    --water: #43a7da;
+    --water-deep: #7cc7ec;
+    --water-wash: #12384c;
+
+    --seq-1: #1b4a63;
+    --seq-2: #2e7fac;
+    --seq-3: #6fbee4;
+
+    --ok-bg: #123024;
+    --ok-ink: #7fd3a0;
+    --ok-line: #1f4c36;
+    --no-bg: #37141c;
+    --no-ink: #f0a3b2;
+    --no-line: #57222e;
+
+    --glass: rgba(124, 199, 236, 0.12);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px -14px rgba(0, 0, 0, 0.7);
+  }
+}
+
+:root[data-theme="dark"] {
+  --page: #08161e;
+  --surface: #0f2530;
+  --surface-2: #143040;
+  --line: #20404f;
+  --line-strong: #2e5566;
+  --ink: #e6f1f5;
+  --ink-2: #a9c4cf;
+  --muted: #7e9daa;
+  --water: #43a7da;
+  --water-deep: #7cc7ec;
+  --water-wash: #12384c;
+  --seq-1: #1b4a63;
+  --seq-2: #2e7fac;
+  --seq-3: #6fbee4;
+  --ok-bg: #123024;
+  --ok-ink: #7fd3a0;
+  --ok-line: #1f4c36;
+  --no-bg: #37141c;
+  --no-ink: #f0a3b2;
+  --no-line: #57222e;
+  --glass: rgba(124, 199, 236, 0.12);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px -14px rgba(0, 0, 0, 0.7);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font-body), "Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono {
+  font-family: var(--font-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display), "Bricolage Grotesque", "Public Sans", sans-serif;
+  margin: 0;
+  text-wrap: balance;
+  letter-spacing: -0.015em;
+}
+
+.wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 24px 72px;
+}
+
+/* ---------- top bar ---------- */
+.top {
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.top-in {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-display), "Bricolage Grotesque", sans-serif;
+  font-weight: 800;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+.brand svg {
+  display: block;
+}
+.brand span {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding-left: 2px;
+}
+.spacer {
+  flex: 1;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  background: var(--surface);
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--s2);
+  flex: none;
+}
+.dot.stale {
+  background: var(--s4);
+}
+
+.seg {
+  display: flex;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.seg button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono), "IBM Plex Mono", monospace;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 6px 11px;
+  border-right: 1px solid var(--line);
+}
+.seg button:last-child {
+  border-right: 0;
+}
+.seg button[aria-pressed="true"] {
+  background: var(--water);
+  color: #fff;
+}
+.seg button:focus-visible {
+  outline: 2px solid var(--water);
+  outline-offset: -2px;
+}
+
+.notice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 18px 0 0;
+  padding: 11px 14px;
+  border-radius: 10px;
+  background: var(--water-wash);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.notice b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.notice code {
+  font-family: var(--font-mono), "IBM Plex Mono", monospace;
+  font-size: 11.5px;
+}
+
+/* ---------- hero ---------- */
+.hero {
+  margin-top: 22px;
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  gap: 26px;
+  align-items: start;
+}
+@media (max-width: 820px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hero-num {
+  font-family: var(--font-display), "Bricolage Grotesque", sans-serif;
+  font-weight: 800;
+  font-size: clamp(56px, 9vw, 86px);
+  line-height: 0.92;
+  letter-spacing: -0.04em;
+  color: var(--water);
+  font-variant-numeric: tabular-nums;
+}
+.hero-num small {
+  font-size: 0.36em;
+  letter-spacing: -0.01em;
+  color: var(--ink-2);
+  font-weight: 600;
+  margin-left: 0.12em;
+}
+.hero-lead {
+  font-size: 16px;
+  color: var(--ink-2);
+  margin-top: 10px;
+  max-width: 34ch;
+}
+.hero-range {
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: var(--muted);
+  border-left: 2px solid var(--line-strong);
+  padding-left: 11px;
+}
+
+.lever {
+  margin-top: 22px;
+  padding: 14px 15px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--s3);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.lever-k {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.lever p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.lever b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.lever .mono {
+  font-size: 12px;
+  color: var(--ink);
+}
+
+/* ---------- vessels ---------- */
+.vessels-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+.vessels-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.vessels-head h2 {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.vessels-head .k {
+  font-size: 11.5px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vessel-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  align-items: end;
+}
+.vessel {
+  position: relative;
+  width: 100%;
+}
+.vessel svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.v-line {
+  stroke: var(--line-strong);
+  stroke-width: 2.5;
+  fill: none;
+  stroke-linejoin: round;
+}
+.v-detail {
+  stroke: var(--line-strong);
+  stroke-width: 1.4;
+  fill: none;
+  opacity: 0.65;
+}
+.v-void {
+  fill: var(--glass);
+}
+.wave {
+  animation: waveShift 3.4s linear infinite;
+}
+.wave.b {
+  animation-duration: 5.1s;
+  animation-direction: reverse;
+  opacity: 0.55;
+}
+@keyframes waveShift {
+  to {
+    transform: translateX(-50px);
+  }
+}
+/*
+ * The water level is a plain transform, set inline from the data, and it never
+ * animates.
+ *
+ * Entrance animations were tried and removed. Every form of them — a CSS
+ * transition up from empty, a keyframed rise, a rise on a wrapper element —
+ * has a `from` frame showing an empty vessel, and on this page that frame is
+ * the one that gets painted: with this many animated elements the animations
+ * are still pending when the first frame lands. The result was five empty
+ * tanks beneath a headline reading 531 L. A page about honest measurement
+ * cannot render an empty vessel for a full one, so the quantity is never
+ * carried by animation state.
+ *
+ * The waves still drift horizontally, which reads as liquid while encoding
+ * nothing about the level.
+ */
+.water-g {
+  transform: translateY(132px);
+}
+
+
+.floor {
+  position: relative;
+  height: 52px;
+  margin-top: 2px;
+}
+.floor .ground {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 34px;
+  height: 2px;
+  background: var(--line-strong);
+  border-radius: 2px;
+}
+.puddle {
+  position: absolute;
+  top: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 9px;
+  width: 0;
+  background: linear-gradient(90deg, transparent, var(--water) 18%, var(--water) 82%, transparent);
+  border-radius: 50%;
+  opacity: 0.85;
+  transition: width 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.drip {
+  position: absolute;
+  top: 0;
+  width: 5px;
+  height: 7px;
+  border-radius: 50% 50% 60% 60%;
+  background: var(--water);
+  opacity: 0;
+  animation: fall 1.5s ease-in infinite;
+}
+@keyframes fall {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scaleY(0.7);
+  }
+  12% {
+    opacity: 0.95;
+  }
+  72% {
+    opacity: 0.95;
+    transform: translateY(30px) scaleY(1.5);
+  }
+  86% {
+    opacity: 0;
+    transform: translateY(34px) scaleY(0.35);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(34px) scaleY(0.35);
+  }
+}
+
+.ladder {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+.rung {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 2px 5px;
+  border-radius: 8px;
+  position: relative;
+  transition: background 0.2s;
+}
+.rung svg {
+  width: 100%;
+  max-width: 26px;
+  height: auto;
+  display: block;
+}
+.rung .rl {
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.25;
+  font-family: var(--font-mono), "IBM Plex Mono", monospace;
+}
+.rung .rp {
+  stroke: var(--line-strong);
+  stroke-width: 5;
+  fill: none;
+  opacity: 0.5;
+}
+.rung.on {
+  background: var(--water-wash);
+}
+.rung.on .rp {
+  stroke: var(--water);
+  opacity: 1;
+}
+.rung.on .rl {
+  color: var(--ink);
+  font-weight: 600;
+}
+.rung.done .rp {
+  stroke: var(--water);
+  opacity: 0.42;
+}
+.vessel-note {
+  margin: 11px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.vessel-note b {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Every animation here is removed rather than shortened. Each one has a
+     correct resting state, so removing the motion loses nothing but motion. */
+  .wave,
+  .drip,
+  .fillbar {
+    animation: none;
+  }
+  .water-g,
+  .puddle,
+  .fillbar {
+    transition: none;
+  }
+  .drip {
+    opacity: 0.6;
+  }
+}
+
+/* ---------- grid & cards ---------- */
+.row {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+.row.k4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.row.k2 {
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+}
+@media (max-width: 900px) {
+  .row.k4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .row.k2 {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 520px) {
+  .row.k4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 17px 18px;
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+.card h3 {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  margin-bottom: 3px;
+}
+.card .sub {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-bottom: 15px;
+}
+
+.tile .lab {
+  font-size: 11.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.tile .val {
+  font-family: var(--font-display), "Bricolage Grotesque", sans-serif;
+  font-weight: 700;
+  font-size: 30px;
+  line-height: 1.15;
+  margin-top: 7px;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.tile .val em {
+  font-style: normal;
+  font-size: 0.5em;
+  color: var(--ink-2);
+  font-weight: 600;
+  margin-left: 0.15em;
+}
+.tile .foot {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 5px;
+}
+
+/* ---------- chart ---------- */
+.chartbox {
+  position: relative;
+}
+.chartbox svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.gridline {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.axis-t {
+  fill: var(--muted);
+  font-family: var(--font-mono), "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+}
+.tip {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  padding: 9px 11px;
+  box-shadow: var(--shadow);
+  font-size: 12.5px;
+  min-width: 150px;
+  z-index: 5;
+}
+.tip.on {
+  opacity: 1;
+}
+.tip .t-m {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.tip .t-v {
+  font-family: var(--font-display), "Bricolage Grotesque", sans-serif;
+  font-weight: 700;
+  font-size: 19px;
+  color: var(--water);
+  margin: 2px 0 3px;
+  font-variant-numeric: tabular-nums;
+}
+.tip .t-r {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-family: var(--font-mono), "IBM Plex Mono", monospace;
+}
+.cap {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+}
+
+/* ---------- model bars ---------- */
+.mbar {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 13px;
+}
+.mrow .mtop {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+.mrow .mname {
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+.mrow .mval {
+  font-family: var(--font-mono), "IBM Plex Mono", monospace;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  flex: none;
+}
+.track {
+  height: 9px;
+  border-radius: 0 4px 4px 0;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+/* Same contract as the water level: the width is the datum, so it is a plain
+   style and never an animation state. A `scaleX(0)` entrance left every bar
+   invisible whenever the animation had not started by first paint — the same
+   failure as the vessels, and just as misleading. The width still transitions
+   when it changes between renders, which is safe because both endpoints are
+   real values. */
+.fillbar {
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ---------- split stack ---------- */
+.stack {
+  display: flex;
+  gap: 2px;
+  height: 34px;
+  margin: 4px 0 14px;
+}
+.stack div {
+  border-radius: 3px;
+  transition: flex-grow 0.4s;
+}
+.legend {
+  display: grid;
+  gap: 9px;
+}
+.legend .li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+}
+.legend .li b {
+  margin-left: auto;
+  font-family: var(--font-mono), "IBM Plex Mono", monospace;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+/* ---------- sources ---------- */
+.src {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 700px) {
+  .src {
+    grid-template-columns: 1fr;
+  }
+}
+.s-item {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 13px 14px;
+  background: var(--surface-2);
+}
+.s-top {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 5px;
+}
+.s-top h4 {
+  margin: 0;
+  font-size: 13.5px;
+  font-family: var(--font-display), "Bricolage Grotesque", sans-serif;
+  font-weight: 600;
+}
+.pill {
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2.5px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+  flex: none;
+  margin-left: auto;
+}
+.pill.y {
+  background: var(--ok-bg);
+  color: var(--ok-ink);
+  border: 1px solid var(--ok-line);
+}
+.pill.n {
+  background: var(--no-bg);
+  color: var(--no-ink);
+  border: 1px solid var(--no-line);
+}
+.pill.idle {
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--line-strong);
+}
+.s-item p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.s-item code {
+  font-family: var(--font-mono), "IBM Plex Mono", monospace;
+  font-size: 11.5px;
+  background: var(--water-wash);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--ink);
+  word-break: break-all;
+}
+
+/* ---------- table ---------- */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12.5px;
+}
+.tblwrap {
+  overflow-x: auto;
+}
+th,
+td {
+  text-align: right;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+th:first-child,
+td:first-child {
+  text-align: left;
+}
+th {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+td {
+  font-family: var(--font-mono), "IBM Plex Mono", monospace;
+  color: var(--ink-2);
+}
+td:first-child {
+  font-family: var(--font-body), "Public Sans", sans-serif;
+  color: var(--ink);
+}
+
+details {
+  margin-top: 16px;
+}
+summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--water);
+  font-weight: 500;
+}
+summary:focus-visible {
+  outline: 2px solid var(--water);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+footer {
+  margin-top: 34px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+footer a {
+  color: var(--water);
+}
+.sec {
+  margin-top: 32px;
+}
+.sec h2 {
+  font-size: 19px;
+  margin-bottom: 3px;
+}
+.sec .lede {
+  font-size: 13.5px;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+/* ---------- empty state ---------- */
+.empty {
+  margin-top: 26px;
+  padding: 34px 28px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.empty h2 {
+  font-size: 21px;
+  margin-bottom: 8px;
+}
+.empty p {
+  color: var(--ink-2);
+  font-size: 14px;
+  max-width: 58ch;
+  margin: 0 auto 16px;
+}
+.empty pre {
+  display: inline-block;
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-family: var(--font-mono), "IBM Plex Mono", monospace;
+  font-size: 12.5px;
+  color: var(--ink);
+  margin: 0;
+  overflow-x: auto;
+  max-width: 100%;
+}

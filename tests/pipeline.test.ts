@@ -307,7 +307,8 @@ describe("credential sealing", () => {
     const sealed = seal("secret", master);
     const parts = sealed.split(".");
     const payload = Buffer.from(parts[3]!, "base64url");
-    payload[payload.length - 1] ^= 0xff;
+    const last = payload.length - 1;
+    payload[last] = (payload[last] ?? 0) ^ 0xff;
     parts[3] = payload.toString("base64url");
     expect(() => open(parts.join("."), master)).toThrow(SecretError);
   });
