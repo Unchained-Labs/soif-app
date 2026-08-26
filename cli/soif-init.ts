@@ -24,6 +24,8 @@ import { closeDatabase, getDatabase, resolveDialect, sqlitePath } from "@/lib/db
 import { Repository } from "@/lib/db/repository";
 import { discoverRoots, listTranscripts } from "@/lib/scan/roots";
 import { discoverCodexRoots, listCodexSessions } from "@/lib/scan/codex";
+import { discoverSpecRoots, listSpecFiles } from "@/lib/scan/local-spec";
+import { LOCAL_SCAN_SPECS } from "@/lib/scan/specs";
 import { ingestLocalScan } from "@/lib/scan/ingest";
 import { loadFactors } from "@/lib/soif/factors";
 import { estimateAll } from "@/lib/pipeline/estimate-records";
@@ -146,6 +148,21 @@ async function detectLocal(): Promise<Detected[]> {
       detail: `${root.codexHome}${who ? ` · ${who}` : ""}`,
       files: files.length,
     });
+  }
+
+  // Everything driven by a declarative spec: Gemini CLI, Qwen Code, and
+  // whatever is added next. Adding a provider should not mean remembering to
+  // teach the wizard about it separately.
+  for (const spec of LOCAL_SCAN_SPECS) {
+    for (const root of await discoverSpecRoots(spec)) {
+      const files = await listSpecFiles(root);
+      if (files.length === 0) continue;
+      found.push({
+        spec: PROVIDERS.find((p) => p.kind === spec.kind)!,
+        detail: root.sessionsDir,
+        files: files.length,
+      });
+    }
   }
 
   return found;

@@ -132,7 +132,12 @@ describe("provider catalogue", () => {
 
   it("lists exactly the credential-free sources as local", () => {
     const kinds = localProviders().map((p) => p.kind).sort();
-    expect(kinds).toEqual(["claude_code_local", "codex_local"]);
+    expect(kinds).toEqual([
+      "claude_code_local",
+      "codex_local",
+      "gemini_cli_local",
+      "qwen_code_local",
+    ]);
   });
 
   it("maps model names to vendors, and refuses to guess", () => {

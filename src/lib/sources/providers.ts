@@ -15,15 +15,34 @@ import type { InputConvention } from "./normalize";
  * accounting means, and what to tell the user when it cannot be read at all.
  */
 
-export type VendorId = "anthropic" | "openai" | "google" | "xai" | "mistral" | "deepseek" | "other";
+export type VendorId =
+  | "anthropic"
+  | "openai"
+  | "google"
+  | "xai"
+  | "mistral"
+  | "deepseek"
+  | "meta"
+  | "qwen"
+  | "moonshot"
+  | "zai"
+  | "cohere"
+  | "amazon"
+  | "microsoft"
+  | "openrouter"
+  | "other";
 
 /** How a source gets its data. */
 export type SourceKind =
   | "claude_code_local"
   | "codex_local"
+  | "gemini_cli_local"
+  | "qwen_code_local"
   | "anthropic_admin"
   | "openai_admin"
   | "claude_enterprise"
+  | "claude_personal"
+  | "chatgpt_personal"
   | "csv";
 
 export interface ProviderSpec {
@@ -43,8 +62,27 @@ export interface ProviderSpec {
   credentialPrefix?: string;
   /** Docs link for obtaining the credential. */
   credentialHelp?: string;
-  /** Implemented and wired, or declared but not yet available. */
-  status: "available" | "planned";
+  /**
+   * `available` — wired and usable.
+   * `planned`   — buildable, not built yet.
+   * `unreadable`— cannot be built, because the vendor exposes no usage data.
+   *
+   * The third value exists so the UI can say so plainly instead of leaving a
+   * gap. Never inventing a data source is one of this project's load-bearing
+   * rules, and a silently absent card is a quiet way to break it.
+   */
+  status: "available" | "planned" | "unreadable";
+  /**
+   * How much this adapter has actually been proven.
+   *
+   * The dashboard shows this, because "we support Gemini" means something very
+   * different when it has been run against a real corpus versus built from a
+   * schema. A source that reads zeros is indistinguishable from a provider you
+   * did not use, so the confidence has to travel with the claim.
+   */
+  verification?: "real-corpus" | "vendor-source" | "fixture-only";
+  /** What the adapter was built from, when it is not obvious. */
+  verifiedFrom?: string;
 }
 
 export const PROVIDERS: readonly ProviderSpec[] = [
@@ -60,6 +98,8 @@ export const PROVIDERS: readonly ProviderSpec[] = [
     inputConvention: "disjoint",
     reportsGeo: true,
     status: "available",
+    verification: "real-corpus",
+    verifiedFrom: "Run against a 527 MB / 255-file corpus of real transcripts.",
   },
   {
     kind: "codex_local",
@@ -73,6 +113,37 @@ export const PROVIDERS: readonly ProviderSpec[] = [
     inputConvention: "inclusive",
     reportsGeo: false,
     status: "available",
+    verification: "vendor-source",
+    verifiedFrom: "steipete/CodexBar rollout fixtures and its Codex token accounting.",
+  },
+  {
+    kind: "gemini_cli_local",
+    vendor: "google",
+    label: "Gemini CLI (local scan)",
+    description:
+      "Reads per-message token counts out of Gemini CLI chat recordings in ~/.gemini. Works on " +
+      "any plan, needs no credential, and never leaves the machine.",
+    transport: "local",
+    // promptTokenCount includes cachedContentTokenCount.
+    inputConvention: "inclusive",
+    reportsGeo: false,
+    status: "available",
+    verification: "vendor-source",
+    verifiedFrom: "google-gemini/gemini-cli chatRecordingService.ts and chatRecordingTypes.ts.",
+  },
+  {
+    kind: "qwen_code_local",
+    vendor: "qwen",
+    label: "Qwen Code (local scan)",
+    description:
+      "Reads Qwen Code chat recordings in ~/.qwen. Same on-disk format as Gemini CLI, which it " +
+      "forked, so the two share one reader.",
+    transport: "local",
+    inputConvention: "inclusive",
+    reportsGeo: false,
+    status: "available",
+    verification: "fixture-only",
+    verifiedFrom: "QwenLM/qwen-code retains gemini-cli's chatRecordingService.",
   },
   {
     kind: "anthropic_admin",
@@ -87,6 +158,7 @@ export const PROVIDERS: readonly ProviderSpec[] = [
     credentialPrefix: "sk-ant-admin",
     credentialHelp: "https://console.anthropic.com/settings/admin-keys",
     status: "available",
+    verification: "fixture-only",
   },
   {
     kind: "openai_admin",
@@ -101,6 +173,7 @@ export const PROVIDERS: readonly ProviderSpec[] = [
     credentialPrefix: "sk-",
     credentialHelp: "https://platform.openai.com/settings/organization/admin-keys",
     status: "available",
+    verification: "fixture-only",
   },
   {
     kind: "csv",
@@ -114,6 +187,33 @@ export const PROVIDERS: readonly ProviderSpec[] = [
     inputConvention: "disjoint",
     reportsGeo: false,
     status: "available",
+    verification: "real-corpus",
+    verifiedFrom: "Round-tripped with multi-vendor exports.",
+  },
+  {
+    kind: "claude_personal",
+    vendor: "anthropic",
+    label: "Claude Pro / Max personal",
+    description:
+      "Individual subscriptions expose no documented usage API, so history cannot be pulled. " +
+      "Anthropic's own docs state the Admin API is unavailable for individual accounts. Use the " +
+      "Claude Code local scan instead — it reports the same real token counts.",
+    transport: "api",
+    inputConvention: "disjoint",
+    reportsGeo: false,
+    status: "unreadable",
+  },
+  {
+    kind: "chatgpt_personal",
+    vendor: "openai",
+    label: "ChatGPT Plus / Pro personal",
+    description:
+      "Individual ChatGPT subscriptions expose no usage API. Use the Codex CLI local scan, which " +
+      "reports real per-turn token counts on any plan.",
+    transport: "api",
+    inputConvention: "inclusive",
+    reportsGeo: false,
+    status: "unreadable",
   },
   {
     kind: "claude_enterprise",
@@ -151,6 +251,14 @@ export const VENDOR_LABELS: Record<VendorId, string> = {
   xai: "xAI",
   mistral: "Mistral",
   deepseek: "DeepSeek",
+  meta: "Meta",
+  qwen: "Qwen",
+  moonshot: "Moonshot",
+  zai: "Z.ai",
+  cohere: "Cohere",
+  amazon: "Amazon",
+  microsoft: "Microsoft",
+  openrouter: "OpenRouter",
   other: "Other",
 };
 
@@ -164,11 +272,25 @@ export const VENDOR_LABELS: Record<VendorId, string> = {
  */
 export function vendorFromModel(model: string): VendorId {
   const name = model.toLowerCase();
+  // Ordered most-specific first: `openai/gpt-4o` and `anthropic.claude-…` both
+  // occur in the wild, as do Bedrock and Vertex prefixes.
   if (/claude/.test(name)) return "anthropic";
-  if (/^(gpt|o[134]|codex|davinci|text-embedding)/.test(name) || /openai/.test(name)) return "openai";
+  if (/^(gpt|o[134][-.]|o[134]$|codex|davinci|text-embedding)/.test(name) || /openai/.test(name)) {
+    return "openai";
+  }
   if (/gemini|gemma|palm|bison/.test(name)) return "google";
   if (/grok/.test(name)) return "xai";
-  if (/mistral|mixtral|ministral|magistral|devstral/.test(name)) return "mistral";
+  if (/mistral|mixtral|ministral|magistral|devstral|codestral|pixtral/.test(name)) return "mistral";
   if (/deepseek/.test(name)) return "deepseek";
+  if (/llama|codellama/.test(name)) return "meta";
+  if (/qwen|qwq/.test(name)) return "qwen";
+  if (/kimi|moonshot/.test(name)) return "moonshot";
+  if (/glm|zhipu|z-ai/.test(name)) return "zai";
+  if (/command-|cohere/.test(name)) return "cohere";
+  if (/titan|nova-(micro|lite|pro|premier)/.test(name)) return "amazon";
+  if (/phi-\d/.test(name)) return "microsoft";
+  // Deliberately last and deliberately `other`: an unrecognised model already
+  // falls back to the `average` data-centre preset in soif's registry, and
+  // pretending to know its vendor here would imply a precision that is absent.
   return "other";
 }

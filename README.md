@@ -58,14 +58,34 @@ docker compose up
 
 ## Where the numbers come from
 
-| Source | Vendor | Auth | What you get | Status |
-|---|---|---|---|---|
-| **Claude Code local scan** | Anthropic | none | Real per-message usage, with project and geo | **Shipped** |
-| **Codex CLI local scan** | OpenAI | none | Per-turn token counts, with project | **Shipped** |
-| **CSV import** | any | none | Universal escape hatch, any provider | **Shipped** |
-| **Anthropic Usage Admin API** | Anthropic | `sk-ant-admin01-…` | Token counts by model, geo, workspace | Client + backfill planner |
-| **OpenAI organization usage** | OpenAI | org admin key | Token counts by model, project, tier | Client + pagination |
-| Claude Enterprise analytics | Anthropic | Analytics key | For claude.ai orgs with no Console key | Not yet |
+| Source | Vendor | Auth | Verified against |
+|---|---|---|---|
+| **Claude Code local scan** | Anthropic | none | A real 527 MB / 255-file corpus |
+| **Codex CLI local scan** | OpenAI | none | CodexBar's rollout fixtures and token accounting |
+| **Gemini CLI local scan** | Google | none | `gemini-cli`'s own `chatRecordingService.ts` |
+| **Qwen Code local scan** | Qwen | none | Fixtures; shares Gemini CLI's format, which it forked |
+| **CSV import** | any | none | Round-tripped multi-vendor exports |
+| **Anthropic Usage Admin API** | Anthropic | `sk-ant-admin01-…` | Recorded fixtures |
+| **OpenAI organization usage** | OpenAI | org admin key | Recorded fixtures; endpoint checked against current docs |
+
+Every adapter states what it was verified against, in the catalogue and on the dashboard. That
+matters more than a support count: **an adapter that silently reads zeros is indistinguishable
+from a provider you did not use.** Nothing here was written from memory of a format.
+
+Sources that cannot be read at all say so rather than being omitted — personal Claude Pro/Max and
+ChatGPT Plus/Pro expose no usage API, and the UI points at the matching local scan instead.
+
+### Not built, and why
+
+| Tool | Reason |
+|---|---|
+| goose | Stores sessions in SQLite (`sessions.db`), not JSONL — needs a different reader |
+| opencode | Migrated to a versioned database with active migrations; a moving schema breaks silently |
+| Cursor | `ai-code-tracking.db` records edits, not token usage |
+| aider | Token counts live in analytics, not the chat history file |
+
+All four are reachable today via CSV import. Adding a real adapter means writing a spec plus a
+fixture — see `src/lib/scan/specs.ts`, where every spec must name the evidence it was built from.
 
 The two local scans need no credential and work on personal plans. The CSV import covers
 everything else — Google, Mistral, xAI, DeepSeek, a self-hosted model, anything with an export:
@@ -75,18 +95,42 @@ npx soif-scan --import usage.csv                          # Anthropic-style colu
 npx soif-scan --import usage.csv --csv-inclusive-input     # OpenAI-style columns
 ```
 
-### One difference that is worth an order of magnitude
+### Providers disagree about what a token count means
 
-**Anthropic reports `input_tokens` excluding cache reads. OpenAI reports it including them.**
+Three disagreements, each worth a large error, each handled in one place rather than per adapter:
+
+**1. Does `input` include cache reads?**
+
+| | Convention |
+|---|---|
+| Anthropic, Claude Code | `input_tokens` **excludes** cache reads |
+| OpenAI, Codex, Google | `input_tokens` **includes** them as a subset |
 
 soif charges cache reads at 1% of an output token and uncached input at 10%. On an agentic
-workload — where cache reads outnumber output tokens by ~300:1 on the reference corpus — passing
-an OpenAI count through as if it were an Anthropic one bills every cached token at ten times its
-correct weight *and* counts it twice.
+workload — cache reads outnumber output tokens ~300:1 on the reference corpus — passing an OpenAI
+count through as Anthropic-shaped bills every cached token at ten times its weight *and* counts it
+twice.
 
-Every provider therefore declares its convention in `src/lib/sources/providers.ts`, and
-`normalizeTokens` is the single place raw counts become comparable. The database only ever stores
-disjoint counts.
+**2. Are thinking tokens inside the output count?**
+
+| | Convention |
+|---|---|
+| Anthropic, OpenAI | `output_tokens` **already contains** thinking tokens |
+| Google | `candidatesTokenCount` **excludes** `thoughtsTokenCount`; both sum into the total |
+
+Reasoning is charged at the *full* output rate — the most expensive class there is. Adding
+Anthropic's twice inflates it; not adding Google's discards most of the decode cost on a thinking
+model, which is exactly what Gemini CLI runs.
+
+**3. Where was it served?**
+
+Water intensity is a property of the data centre, not the model. Anthropic on AWS (~0.18 L/kWh
+WUE), OpenAI on Azure (~0.49), Google on its own fleet (~1.10) — a 6× spread on the on-site term
+alone. In the synthetic Gemini corpus, on-site water is 26% of the total; on the Claude corpus it
+is 6%. Same arithmetic, different fleet.
+
+Every provider declares its conventions in `src/lib/sources/providers.ts`; `normalizeTokens` is
+the single place raw counts become comparable; the database only ever stores disjoint counts.
 
 **There is no OAuth "connect your Claude account" flow, because one does not exist.** Anthropic's
 Usage & Cost API documentation states plainly that *the Admin API is unavailable for individual
@@ -178,7 +222,8 @@ demonstrated, not claimed.
 
 ```
 src/lib/soif/       estimator ported from Python, driven entirely by factors.json
-src/lib/scan/       incremental JSONL scanner; Claude Code and Codex adapters; ingest
+src/lib/scan/       incremental JSONL scanner; Claude Code and Codex adapters;
+                    declarative spec engine + verified specs; ingest
 src/lib/sources/    provider catalogue, token normalization, Anthropic + OpenAI clients, CSV
 src/lib/pipeline/   raw token counts → water estimates → aggregates
 src/lib/db/         dual-dialect schema, repository, migrations
@@ -246,9 +291,10 @@ of one and are grouped honestly as unattributed rather than dropped.
 3. ~~Dashboard UI~~
 4. ~~Multi-provider: Codex local scan, OpenAI usage client, CSV import~~
 5. ~~Install wizard~~
-6. Wire the Admin API clients to a scheduled worker (clients and pagination are done; nothing runs
+6. ~~Gemini CLI and Qwen Code adapters~~
+7. Wire the Admin API clients to a scheduled worker (clients and pagination are done; nothing runs
    them on a timer yet)
-7. Claude Enterprise analytics; a Gemini CLI adapter once its on-disk format is verifiable
+8. goose and opencode, both of which need a SQLite reader; Claude Enterprise analytics
 
 ## License
 

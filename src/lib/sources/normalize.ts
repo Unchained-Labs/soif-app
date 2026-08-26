@@ -42,12 +42,39 @@ export type InputConvention =
   /** `input` is the whole prompt, with cache reads a subset (OpenAI, Codex). */
   | "inclusive";
 
+/**
+ * How a provider reports thinking tokens relative to its output count.
+ *
+ * A third disagreement, and it matters because soif charges reasoning at the
+ * *full* output rate — the most expensive token class there is:
+ *
+ *   Anthropic  `output_tokens` already contains the thinking tokens.
+ *              Adding them again double-charges the priciest tokens.
+ *   Google     `candidatesTokenCount` excludes `thoughtsTokenCount`; the two
+ *              sum into `totalTokenCount`. Not adding them silently drops all
+ *              reasoning work, which on a thinking model is most of the cost.
+ *
+ * Verified from google-gemini/gemini-cli's own recorder, which writes the raw
+ * `usageMetadata` fields straight through.
+ */
+export type ReasoningConvention =
+  /** Thinking tokens are already counted inside `output` (Anthropic, OpenAI). */
+  | "inside-output"
+  /** Thinking tokens are reported alongside `output` and must be added (Google). */
+  | "separate";
+
 export interface RawTokens {
   input?: number;
   cacheRead?: number;
   cacheCreation?: number;
   output?: number;
   reasoning?: number;
+}
+
+export interface Conventions {
+  input: InputConvention;
+  /** Defaults to `inside-output`, which is what most providers do. */
+  reasoning?: ReasoningConvention;
 }
 
 /**
@@ -59,12 +86,26 @@ export interface RawTokens {
  * first, then cache writes out of what remains — so no token is counted twice
  * and none is invented.
  */
-export function normalizeTokens(raw: RawTokens, convention: InputConvention): NormalizedTokens {
-  const input = nonNegative(raw.input);
-  const output = nonNegative(raw.output);
-  const reasoning = Math.min(nonNegative(raw.reasoning), output);
+export function normalizeTokens(
+  raw: RawTokens,
+  convention: InputConvention | Conventions,
+): NormalizedTokens {
+  const conventions: Conventions =
+    typeof convention === "string" ? { input: convention } : convention;
 
-  if (convention === "disjoint") {
+  const input = nonNegative(raw.input);
+  const rawReasoning = nonNegative(raw.reasoning);
+
+  // Under `separate`, thinking tokens sit outside the reported output, so they
+  // are folded in — the stored `outputTokens` is always the full decode cost,
+  // and `reasoningTokens` is always the portion of it that was thinking.
+  const output =
+    conventions.reasoning === "separate"
+      ? nonNegative(raw.output) + rawReasoning
+      : nonNegative(raw.output);
+  const reasoning = Math.min(rawReasoning, output);
+
+  if (conventions.input === "disjoint") {
     return {
       inputTokens: input,
       cachedTokens: nonNegative(raw.cacheRead),

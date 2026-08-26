@@ -16,6 +16,9 @@ import { closeDatabase, getDatabase } from "@/lib/db/client";
 import { Repository } from "@/lib/db/repository";
 import { ingestLocalScan, type IngestWarnings } from "@/lib/scan/ingest";
 import { discoverRoots } from "@/lib/scan/roots";
+import { discoverCodexRoots } from "@/lib/scan/codex";
+import { discoverSpecRoots } from "@/lib/scan/local-spec";
+import { LOCAL_SCAN_SPECS } from "@/lib/scan/specs";
 import { loadFactors } from "@/lib/soif/factors";
 import {
   estimateAll,
@@ -174,11 +177,24 @@ async function main(): Promise<number> {
   }
 
   const roots = await discoverRoots(options.roots.length > 0 ? { explicit: options.roots } : {});
-  if (roots.length === 0) {
+
+  // "No Claude transcripts" is not "nothing to scan". A machine may run Codex,
+  // Gemini CLI or Qwen Code and no Claude at all, and bailing here would report
+  // zero water for someone with plenty of usage.
+  const otherRoots =
+    options.roots.length > 0
+      ? 0
+      : (await discoverCodexRoots()).length +
+        (
+          await Promise.all(LOCAL_SCAN_SPECS.map((spec) => discoverSpecRoots(spec)))
+        ).reduce((a, r) => a + r.length, 0);
+
+  if (roots.length === 0 && otherRoots === 0) {
     process.stderr.write(
-      "No Claude Code transcripts found.\n" +
-        "Looked for a projects/ directory under $CLAUDE_CONFIG_DIR, ~/.claude and ~/.config/claude.\n" +
-        "Point at one explicitly with --root <path>.\n",
+      "No local AI tool usage found.\n" +
+        "Looked for Claude Code (~/.claude, ~/.config/claude, $CLAUDE_CONFIG_DIR), " +
+        "Codex (~/.codex, $CODEX_HOME),\nGemini CLI (~/.gemini) and Qwen Code (~/.qwen).\n" +
+        "Point at a directory explicitly with --root <path>, or import a CSV with --import.\n",
     );
     return 1;
   }
@@ -283,7 +299,7 @@ function printReport(payload: ScanPayload, recordCount: number, options: Options
   out(`  ${"─".repeat(58)}`);
   for (const root of payload.scannedRoots) {
     const who = root.account ? ` · ${root.account}` : "";
-    const provider = root.kind === "codex_local" ? "Codex" : "Claude Code";
+    const provider = PROVIDER_SHORT[root.kind] ?? root.kind;
     out(`  [${provider}] ${root.path}${who}`);
     out(
       `    ${root.filesScanned} files, ${(root.bytesScanned / 1e6).toFixed(0)} MB new, ` +
@@ -342,6 +358,14 @@ function printReport(payload: ScanPayload, recordCount: number, options: Options
   out(`  Estimates, not measurements. Full method: METHODOLOGY.md in Unchained-Labs/soif`);
   out();
 }
+
+/** Short provider names for the scan report. */
+const PROVIDER_SHORT: Record<string, string> = {
+  claude_code_local: "Claude Code",
+  codex_local: "Codex",
+  gemini_cli_local: "Gemini CLI",
+  qwen_code_local: "Qwen Code",
+};
 
 /**
  * Import a usage CSV from any provider.

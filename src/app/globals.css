@@ -838,6 +838,11 @@ h3 {
   font-size: 12.5px;
   color: var(--ink-2);
 }
+.s-note {
+  margin-top: 7px !important;
+  font-size: 11.5px !important;
+  color: var(--muted) !important;
+}
 .s-item code {
   font-family: var(--font-mono), "IBM Plex Mono", monospace;
   font-size: 11.5px;

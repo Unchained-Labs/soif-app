@@ -25,7 +25,13 @@ import {
   SplitStack,
   type RankedDatum,
 } from "@/components/Panels";
-import { VENDOR_LABELS, vendorFromModel, type VendorId } from "@/lib/sources/providers";
+import {
+  PROVIDERS,
+  VENDOR_LABELS,
+  vendorFromModel,
+  type ProviderSpec,
+  type VendorId,
+} from "@/lib/sources/providers";
 
 /**
  * The dashboard.
@@ -146,8 +152,7 @@ export default async function Page({ searchParams }: PageProps) {
   const intensity = litresPerMillionOutputTokens(totals);
   const lever = biggestLever(byModel, factors.registry.models);
   const spread = describeSpread(totals.totalMl);
-  const localSource = sources.find((s) => s.kind === "claude_code_local");
-  const adminSource = sources.find((s) => s.kind === "anthropic_admin");
+  const configuredKinds = new Set(sources.map((s) => s.kind));
   const lastRun = lastRuns[0];
   const geoKnown = records.some(
     (r) => r.inferenceGeo && r.inferenceGeo !== "not_available",
@@ -308,52 +313,26 @@ export default async function Page({ searchParams }: PageProps) {
           </p>
           <div className="card" style={{ marginTop: 12 }}>
             <div className="src">
-              <SourceCard
-                title="Claude Code (local scan)"
-                state={localSource ? "on" : "idle"}
-                stateLabel={localSource ? "Active" : "Available"}
-              >
-                Reads real per-message usage out of local transcripts. Works on any plan and never
-                leaves the machine.{" "}
-                {localSource ? (
-                  <>
-                    Last scanned{" "}
-                    {localSource.lastSyncedAt
-                      ? new Date(localSource.lastSyncedAt as string | number).toISOString().slice(0, 16).replace("T", " ")
-                      : "never"}
-                    .
-                  </>
-                ) : (
-                  <>
-                    Run <code>npx soif-scan</code>.
-                  </>
-                )}
-              </SourceCard>
-
-              <SourceCard
-                title="Anthropic Admin API"
-                state={adminSource ? "on" : "idle"}
-                stateLabel={adminSource ? "Connected" : "Not configured"}
-              >
-                Real token counts by model, geo and workspace from{" "}
-                <code>/v1/organizations/usage_report/messages</code>. Needs an admin key. Org
-                accounts only.
-              </SourceCard>
-
-              <SourceCard title="Claude Pro / Max personal" state="off" stateLabel="No public API">
-                Individual subscriptions expose no documented usage API, so lifetime history
-                cannot be pulled. Use the local scan instead — it reports the same token counts.
-              </SourceCard>
-
-              <SourceCard
-                title="Inference geography"
-                state={geoKnown ? "on" : "idle"}
-                stateLabel={geoKnown ? "Reported" : "Not available"}
-              >
-                {geoKnown
-                  ? "Real routing is reported, so grid water intensity is measured rather than assumed."
-                  : "This data reports inference_geo as not_available, so the region falls back to each model's default rather than being guessed."}
-              </SourceCard>
+              {PROVIDERS.map((provider) => (
+                <SourceCard
+                  key={provider.kind}
+                  provider={provider}
+                  active={configuredKinds.has(provider.kind)}
+                />
+              ))}
+              <div className="s-item">
+                <div className="s-top">
+                  <h4>Inference geography</h4>
+                  <span className={`pill ${geoKnown ? "y" : "idle"}`}>
+                    {geoKnown ? "Reported" : "Not available"}
+                  </span>
+                </div>
+                <p>
+                  {geoKnown
+                    ? "Real routing is reported, so grid water intensity is measured rather than assumed."
+                    : "This data reports no inference geography, so each model's region falls back to its registry default rather than being guessed."}
+                </p>
+              </div>
             </div>
           </div>
         </section>
@@ -407,26 +386,49 @@ export default async function Page({ searchParams }: PageProps) {
   );
 }
 
-function SourceCard({
-  title,
-  state,
-  stateLabel,
-  children,
-}: {
-  title: string;
-  state: "on" | "off" | "idle";
-  stateLabel: string;
-  children: React.ReactNode;
-}) {
+/**
+ * How well an adapter is actually proven.
+ *
+ * Shown rather than hidden because "supported" means something very different
+ * for a reader that has been run against a real corpus than for one built from
+ * a published schema. An adapter that silently reads zeros is indistinguishable
+ * from a provider you did not use, so the confidence travels with the claim.
+ */
+const VERIFICATION_LABELS: Record<string, string> = {
+  "real-corpus": "Verified against real usage",
+  "vendor-source": "Built from the tool's own source",
+  "fixture-only": "Built from published schema, tested against fixtures",
+};
+
+function SourceCard({ provider, active }: { provider: ProviderSpec; active: boolean }) {
+  const state: "on" | "off" | "idle" =
+    provider.status === "unreadable" ? "off" : provider.status === "planned" ? "idle" : active ? "on" : "idle";
+  const label =
+    provider.status === "unreadable"
+      ? "No public API"
+      : provider.status === "planned"
+        ? "Not built yet"
+        : active
+          ? "Active"
+          : provider.transport === "local"
+            ? "Available"
+            : "Not configured";
+
   return (
     <div className="s-item">
       <div className="s-top">
-        <h4>{title}</h4>
+        <h4>{provider.label}</h4>
         <span className={`pill ${state === "on" ? "y" : state === "off" ? "n" : "idle"}`}>
-          {stateLabel}
+          {label}
         </span>
       </div>
-      <p>{children}</p>
+      <p>{provider.description}</p>
+      {provider.verification && (
+        <p className="s-note">
+          {VERIFICATION_LABELS[provider.verification] ?? provider.verification}
+          {provider.verifiedFrom ? ` — ${provider.verifiedFrom}` : ""}
+        </p>
+      )}
     </div>
   );
 }

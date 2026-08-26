@@ -8,6 +8,14 @@ import {
   parseCodexSession,
   type CodexRoot,
 } from "./codex";
+import {
+  discoverSpecRoots,
+  listSpecFiles,
+  parseWithSpec,
+  type SpecRoot,
+} from "./local-spec";
+import { LOCAL_SCAN_SPECS } from "./specs";
+import type { SourceKind } from "@/lib/sources/providers";
 
 /**
  * Turning a transcript scan into stored usage records.
@@ -37,6 +45,8 @@ export interface IngestOptions {
   codexRoots?: CodexRoot[];
   /** Set false to skip the Codex scan entirely. */
   includeCodex?: boolean;
+  /** Spec-driven providers to scan. Defaults to every verified spec. */
+  specs?: readonly (typeof LOCAL_SCAN_SPECS)[number][];
   /** Ignore stored cursors and re-read every transcript from byte zero. */
   full?: boolean;
   onProgress?: (progress: IngestProgress) => void;
@@ -64,7 +74,7 @@ export interface IngestWarnings {
 /** What every local provider reports back, whatever it scanned. */
 export interface IngestResult {
   sourceId: string;
-  kind: "claude_code_local" | "codex_local";
+  kind: SourceKind;
   /** Directory scanned, for the CLI to name. */
   rootPath: string;
   /** Non-secret account label, when the provider exposes one. */
@@ -76,6 +86,12 @@ export interface IngestResult {
   rowsCollapsed: number;
   recordsInserted: number;
   warnings: IngestWarnings;
+  /**
+   * Files were scanned but nothing was recognised as usage. Means the tool's
+   * format moved out from under the spec — reported rather than swallowed,
+   * because zero water for a provider you use looks identical to not using it.
+   */
+  formatUnrecognised?: boolean;
 }
 
 const EMPTY_WARNINGS: IngestWarnings = {
@@ -112,6 +128,12 @@ export async function ingestLocalScan(
   if (options.includeCodex !== false) {
     for (const root of options.codexRoots ?? (await discoverCodexRoots())) {
       results.push(await ingestCodexRoot(repository, root, options));
+    }
+  }
+
+  for (const spec of options.specs ?? LOCAL_SCAN_SPECS) {
+    for (const root of await discoverSpecRoots(spec)) {
+      results.push(await ingestSpecRoot(repository, root, options));
     }
   }
 
@@ -397,6 +419,135 @@ export async function ingestCodexRoot(
       rowsCollapsed: 0,
       recordsInserted,
       warnings,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await repository.finishSyncRun(runId, { status: "error", error: message, bytesScanned });
+    await repository.markSourceSynced(sourceId, message);
+    throw error;
+  }
+}
+
+/**
+ * Scan one spec-driven root (Gemini CLI, Qwen Code, and whatever comes next).
+ *
+ * The bespoke Claude and Codex paths exist because those formats have real
+ * structural complexity. Everything else is the same shape — append-only JSONL,
+ * counts nested at a known path — so it runs through one engine and a spec.
+ */
+export async function ingestSpecRoot(
+  repository: Repository,
+  root: SpecRoot,
+  options: IngestOptions = {},
+): Promise<IngestResult> {
+  const spec = root.spec;
+  const label = root.sessionsDir;
+  const existing = await repository.findSource(spec.kind, label);
+  const sourceId = await repository.upsertSource({ id: existing?.id, kind: spec.kind, label });
+
+  const runId = await repository.startSyncRun(sourceId);
+  const warnings: IngestWarnings = { ...EMPTY_WARNINGS };
+  let bytesScanned = 0;
+  let filesScanned = 0;
+  const records: UsageRecordInput[] = [];
+
+  try {
+    const files = await listSpecFiles(root);
+
+    for (const file of files) {
+      if (options.signal?.aborted) throw new DOMException("Ingest aborted", "AbortError");
+      options.onProgress?.({ filesTotal: files.length, filesScanned, currentFile: file });
+
+      const info = await stat(file).catch(() => null);
+      if (!info) continue;
+
+      const cursor = options.full ? null : await repository.getCursor(sourceId, file);
+      let offset = cursor?.committedOffset ?? 0;
+      if (offset > info.size) {
+        offset = 0;
+        warnings.cursorsReset += 1;
+      }
+      if (
+        cursor &&
+        offset === info.size &&
+        cursor.fileSize === info.size &&
+        cursor.mtimeMs === Math.trunc(info.mtimeMs)
+      ) {
+        filesScanned += 1;
+        continue;
+      }
+
+      const parsed = await parseWithSpec(spec, file, { offset, signal: options.signal });
+      bytesScanned += parsed.scan.readOffset - offset;
+      filesScanned += 1;
+
+      warnings.linesSkippedTooLong += parsed.scan.linesSkippedTooLong;
+      warnings.linesSkippedPossiblyRelevant += parsed.scan.linesSkippedPossiblyRelevant;
+      warnings.malformedLines += parsed.malformedLines;
+      warnings.emptyUsageLines += parsed.recordsWithoutUsage;
+      warnings.unknownModelEvents += parsed.unknownModelRecords;
+
+      for (const row of parsed.rows) {
+        const at = new Date(row.timestamp);
+        records.push({
+          sourceId,
+          dedupeKey: row.dedupeKey,
+          bucketStart: at,
+          bucketEnd: at,
+          granularity: "message",
+          dayKey: row.dayKey,
+          model: row.model,
+          inputTokens: row.tokens.inputTokens,
+          cachedTokens: row.tokens.cachedTokens,
+          cacheCreationTokens: row.tokens.cacheCreationTokens,
+          outputTokens: row.tokens.outputTokens,
+          reasoningTokens: row.tokens.reasoningTokens,
+          inferenceGeo: null,
+          sessionId: row.sessionId,
+          sourceFile: row.sourceFile,
+          project: row.project,
+        });
+      }
+
+      await repository.saveCursor({
+        sourceId,
+        filePath: file,
+        committedOffset: parsed.scan.committedOffset,
+        fileSize: info.size,
+        mtimeMs: Math.trunc(info.mtimeMs),
+      });
+    }
+
+    const recordsInserted = await repository.insertUsageRecords(records);
+
+    // A root with files but no rows means the spec no longer matches the tool's
+    // format. That has to surface: silently reporting zero water for a provider
+    // you actively use is the worst failure this dashboard has.
+    const formatUnrecognised = filesScanned > 0 && records.length === 0 && bytesScanned > 0;
+
+    await repository.finishSyncRun(runId, {
+      status: formatUnrecognised || warnings.linesSkippedPossiblyRelevant > 0 ? "partial" : "ok",
+      recordsIngested: recordsInserted,
+      bytesScanned,
+      warnings: warnings as unknown as Record<string, number>,
+      error: formatUnrecognised
+        ? `scanned ${filesScanned} ${spec.label} files but recognised no usage records — the format may have changed`
+        : undefined,
+    });
+    await repository.markSourceSynced(sourceId, null);
+
+    return {
+      sourceId,
+      kind: spec.kind,
+      rootPath: root.sessionsDir,
+      account: null,
+      filesScanned,
+      bytesScanned,
+      rowsParsed: records.length,
+      rowsCollapsed: 0,
+      recordsInserted,
+      warnings,
+      formatUnrecognised,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
