@@ -1,0 +1,61 @@
+site_name: soif-app
+site_description: A self-hostable dashboard for the freshwater your LLM usage consumed.
+site_url: https://unchained-labs.github.io/soif-app/
+repo_url: https://github.com/Unchained-Labs/soif-app
+repo_name: Unchained-Labs/soif-app
+copyright: Unchained Labs · Apache-2.0 · estimates, not measurements
+
+theme:
+  name: material
+  icon:
+    logo: material/water
+  # Dark first: every tool in this org is terminal-adjacent, and the brand
+  # tokens are authored against a dark ground. Light is supported, not primary.
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Dark mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - content.tabs.link
+
+extra_css:
+  # tokens.css is vendored from Unchained-Labs/branding and must not be edited
+  # here; extra.css only maps Material's variables onto those tokens.
+  - assets/tokens.css
+  - assets/extra.css
+
+nav:
+  - Home: index.md
+  - Install: install.md
+  - Sources: sources.md
+  - Dashboard: dashboard.md
+  - Methodology: methodology.md
+  - Architecture: architecture.md
+  - Security: security.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Unchained-Labs
