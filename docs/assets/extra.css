@@ -1,73 +1,143 @@
-/* Material for MkDocs, wearing the Unchained Labs palette.
+/* Material for MkDocs, wearing the Unchained Labs brand.
  *
- * This file maps Material's own custom properties onto the brand tokens in
- * `tokens.css`. It deliberately contains no hex values of its own: the branding
- * repo is explicit that colours live in one place and an app repo referencing
- * them is what makes a palette change a one-file swap. If a colour here needs
- * to change, change it in Unchained-Labs/branding and re-vendor `tokens.css`.
+ * The brand fonts are loaded here rather than through Material's own `font:`
+ * option, because the palette needs three faces — display, body and mono — and
+ * Material only wires up two. Declaring them in tokens.css without loading them
+ * (which is what shipped first) silently falls back to system sans, so the site
+ * renders in the wrong typeface while looking like nothing is wrong.
  *
- * Dark is the native ground — every tool in this org is terminal-adjacent — so
- * the dark scheme carries the brand and the light scheme exists so docs read in
- * a bright room without burning retinas.
+ * Everything below maps Material's custom properties onto the tokens in
+ * tokens.css. No hex value is written in this file: the branding repo is
+ * explicit that colours live in one place, so a palette change stays a
+ * one-file swap rather than a grep across seven sites.
  */
 
-/* ---- dark: the default ---------------------------------------------------- */
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+
+/* ---- dark: the native ground ---------------------------------------------- */
 [data-md-color-scheme="slate"] {
   --md-default-bg-color: var(--ul-bg);
   --md-default-bg-color--light: var(--ul-bg-raised);
   --md-default-bg-color--lighter: var(--ul-bg-raised);
+  --md-default-bg-color--lightest: var(--ul-bg-raised);
   --md-default-fg-color: var(--ul-body);
   --md-default-fg-color--light: var(--ul-muted);
   --md-default-fg-color--lighter: var(--ul-faint);
   --md-default-fg-color--lightest: var(--ul-line);
 
   --md-primary-fg-color: var(--ul-bg-inset);
+  --md-primary-fg-color--light: var(--ul-bg-raised);
+  --md-primary-fg-color--dark: var(--ul-bg-inset);
   --md-primary-bg-color: var(--ul-heading);
+  --md-primary-bg-color--light: var(--ul-body);
+
   --md-accent-fg-color: var(--ul-accent);
+  --md-accent-fg-color--transparent: var(--ul-accent-wash);
+  --md-accent-bg-color: var(--ul-on-accent);
 
   --md-typeset-color: var(--ul-body);
   --md-typeset-a-color: var(--ul-accent);
+  --md-typeset-mark-color: var(--ul-accent-wash);
 
   --md-code-bg-color: var(--ul-bg-inset);
   --md-code-fg-color: var(--ul-body);
+  --md-code-hl-comment-color: var(--ul-faint);
+  --md-code-hl-string-color: var(--ul-up);
+  --md-code-hl-number-color: var(--ul-warn);
+  --md-code-hl-keyword-color: var(--ul-accent);
+  --md-code-hl-function-color: var(--ul-accent-dim);
 
   --md-footer-bg-color: var(--ul-bg-inset);
   --md-footer-bg-color--dark: var(--ul-bg-inset);
+  --md-footer-fg-color: var(--ul-body);
+  --md-footer-fg-color--light: var(--ul-muted);
+  --md-footer-fg-color--lighter: var(--ul-faint);
 }
 
-/* ---- light: supported, not primary ---------------------------------------- */
+/* ---- light: supported, not the default ------------------------------------ */
 [data-md-color-scheme="default"] {
   --md-primary-fg-color: var(--ul-bg);
   --md-primary-bg-color: var(--ul-heading);
   --md-accent-fg-color: var(--ul-accent-dim);
   --md-typeset-a-color: var(--ul-accent-dim);
+  --md-footer-bg-color: var(--ul-bg);
 }
 
 /* ---- type ----------------------------------------------------------------- */
+:root {
+  --md-text-font: var(--ul-font-body);
+  --md-code-font: var(--ul-font-mono);
+}
+
 body,
 .md-typeset {
   font-family: var(--ul-font-body);
+  font-feature-settings: "cv05", "ss01";
 }
+
 .md-typeset h1,
 .md-typeset h2,
 .md-typeset h3,
-.md-header__title,
-.md-nav__title {
+.md-typeset h4,
+.md-header__topic,
+.md-nav__title,
+.md-tabs__link {
   font-family: var(--ul-font-display);
-  letter-spacing: -0.015em;
 }
+
 .md-typeset h1 {
   color: var(--ul-heading);
   font-weight: 700;
+  letter-spacing: -0.03em;
+  font-size: 2.1rem;
+  line-height: 1.15;
+  margin-bottom: 1.2rem;
 }
-.md-typeset h2,
+.md-typeset h2 {
+  color: var(--ul-heading);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-top: 2.4em;
+  padding-top: 0.6em;
+  border-top: 1px solid var(--ul-line);
+}
 .md-typeset h3 {
   color: var(--ul-heading);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 .md-typeset code,
 .md-typeset pre,
 .md-typeset kbd {
   font-family: var(--ul-font-mono);
+  font-size: 0.78em;
+}
+
+/* ---- header and nav chrome ------------------------------------------------ */
+.md-header {
+  border-bottom: 1px solid var(--ul-line);
+  box-shadow: none;
+}
+.md-header__title {
+  font-family: var(--ul-font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.md-tabs {
+  border-bottom: 1px solid var(--ul-line);
+}
+[data-md-color-scheme="slate"] .md-nav__link--active,
+[data-md-color-scheme="slate"] .md-nav__link:focus,
+[data-md-color-scheme="slate"] .md-nav__link:hover {
+  color: var(--ul-accent);
+}
+.md-nav__title {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+/* The active table-of-contents marker, in the brand accent rather than blue. */
+[data-md-color-scheme="slate"] .md-nav--secondary .md-nav__link--active {
+  color: var(--ul-accent);
 }
 
 /* ---- surfaces ------------------------------------------------------------- */
@@ -76,20 +146,38 @@ body,
   border: 1px solid var(--ul-line);
   border-radius: var(--ul-radius);
 }
+.md-typeset .highlighttable .linenos {
+  border-right: 1px solid var(--ul-line);
+}
+
 [data-md-color-scheme="slate"] .md-typeset table:not([class]) {
   border: 1px solid var(--ul-line);
   border-radius: var(--ul-radius);
   overflow: hidden;
+  font-size: 0.72rem;
 }
 [data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
   background: var(--ul-bg-raised);
   color: var(--ul-heading);
   font-weight: 600;
+  font-family: var(--ul-font-display);
+  letter-spacing: 0.01em;
+}
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) tr:hover {
+  background: var(--ul-accent-wash);
 }
 
-/* ---- admonitions carry the status axis, never the brand accent ------------ */
-/* The palette doc is firm that "did it pass?" and "is this us?" are separate
- * questions, so a warning must never borrow the brand teal. */
+/* ---- admonitions: status is a separate axis from the brand ---------------- */
+/* The palette doc is firm that "did it pass?" and "is this us?" are different
+ * questions, so a warning never borrows the brand teal. */
+.md-typeset .admonition,
+.md-typeset details {
+  border-width: 1px;
+  border-left-width: 3px;
+  border-radius: var(--ul-radius);
+  box-shadow: none;
+  font-size: 0.72rem;
+}
 [data-md-color-scheme="slate"] .md-typeset .admonition.warning,
 [data-md-color-scheme="slate"] .md-typeset details.warning {
   border-color: var(--ul-warn);
@@ -97,6 +185,10 @@ body,
 [data-md-color-scheme="slate"] .md-typeset .warning > .admonition-title,
 [data-md-color-scheme="slate"] .md-typeset .warning > summary {
   background: var(--ul-warn-wash);
+}
+[data-md-color-scheme="slate"] .md-typeset .warning > .admonition-title::before,
+[data-md-color-scheme="slate"] .md-typeset .warning > summary::before {
+  background-color: var(--ul-warn);
 }
 [data-md-color-scheme="slate"] .md-typeset .admonition.danger,
 [data-md-color-scheme="slate"] .md-typeset details.danger {
@@ -114,12 +206,73 @@ body,
 [data-md-color-scheme="slate"] .md-typeset .note > summary {
   background: var(--ul-accent-wash);
 }
+[data-md-color-scheme="slate"] .md-typeset .note > .admonition-title::before,
+[data-md-color-scheme="slate"] .md-typeset .note > summary::before {
+  background-color: var(--ul-accent);
+}
 
-/* ---- the one product-specific flourish ------------------------------------ */
+/* ---- grid cards on the landing page --------------------------------------- */
+[data-md-color-scheme="slate"] .md-typeset .grid.cards > ul > li {
+  border: 1px solid var(--ul-line);
+  border-radius: var(--ul-radius-lg);
+  background: var(--ul-bg-raised);
+  box-shadow: none;
+  transition:
+    border-color 120ms,
+    transform 120ms;
+}
+[data-md-color-scheme="slate"] .md-typeset .grid.cards > ul > li:hover {
+  border-color: var(--ul-accent-dim);
+  transform: translateY(-2px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .md-typeset .grid.cards > ul > li {
+    transition: none;
+  }
+  .md-typeset .grid.cards > ul > li:hover {
+    transform: none;
+  }
+}
+.md-typeset .grid.cards > ul > li > hr {
+  border-color: var(--ul-line);
+}
+
+/* ---- the hero ------------------------------------------------------------- */
+.hero {
+  margin: 0 0 2.4rem;
+}
+.hero .lede {
+  font-family: var(--ul-font-display);
+  font-size: 1.35rem;
+  line-height: 1.35;
+  font-weight: 500;
+  color: var(--ul-heading);
+  letter-spacing: -0.02em;
+  max-width: 26ch;
+  margin: 0 0 0.9rem;
+}
+.hero p {
+  color: var(--ul-muted);
+  max-width: 62ch;
+}
+
 /* soif's own accent is water blue rather than the org teal. Used only for the
- * hero figure, so the page still reads as an Unchained Labs page. */
+ * headline figure, so the page still reads as an Unchained Labs page. */
 .water {
   color: #43a7da;
   font-family: var(--ul-font-display);
   font-weight: 700;
+}
+
+/* ---- footer --------------------------------------------------------------- */
+.md-footer-meta {
+  border-top: 1px solid var(--ul-line);
+}
+.md-copyright {
+  font-size: 0.66rem;
+}
+
+/* ---- selection ------------------------------------------------------------ */
+::selection {
+  background: var(--ul-accent-wash);
 }

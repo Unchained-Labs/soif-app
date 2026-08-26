@@ -1,12 +1,21 @@
+---
+hide:
+  - navigation
+---
+
 # soif-app
 
-**How much freshwater your AI actually drank.**
+<div class="hero" markdown>
 
-A self-hostable dashboard that shows an organization — or one developer — how much freshwater its
-LLM usage consumed. The water analogue of a cloud cost dashboard.
+<p class="lede">How much freshwater your AI actually drank.</p>
 
-<span class="water">546 L</span> across 21,836 calls, on the machine this was built on. Range
-45.4 L – 6,308 L.
+A self-hostable dashboard showing an organization — or one developer — how much freshwater its LLM
+usage consumed. The water analogue of a cloud cost dashboard.
+
+</div>
+
+<span class="water">546 L</span> across 21,836 calls, on the machine this was built on.
+Range 45.4 L – 6,308 L.
 
 !!! warning "Estimates, not measurements"
     Published per-prompt water figures disagree by roughly **100×**. Google measured 0.26 mL per
@@ -20,35 +29,56 @@ LLM usage consumed. The water analogue of a cloud cost dashboard.
 curl -fsSL https://raw.githubusercontent.com/Unchained-Labs/soif-app/main/scripts/install.sh | bash
 ```
 
-From nothing to a running dashboard: clone, install, detect every AI tool on the machine, scan
-what it used, and serve. No credential, no infrastructure, nothing leaves the box. See
-[Install](install.md) for the variants, including the form that lets you read the script first.
+From nothing to a running dashboard: clone, install, detect every AI tool on the machine, scan what
+it used, and serve. No credential, no infrastructure, nothing leaves the box.
+[Install](install.md) covers the variants, including the form that lets you read the script first.
 
-## What it reads
+<div class="grid cards" markdown>
 
-Seven sources across five vendors. Four need no credential at all, which is what makes this usable
-on a personal Pro/Max or ChatGPT plan — those have no usage API whatsoever.
+-   :material-magnify:{ .lg .middle } **Reads what you actually run**
 
-| Source | Vendor | Auth |
-|---|---|---|
-| Claude Code local scan | Anthropic | none |
-| Codex CLI local scan | OpenAI | none |
-| Gemini CLI local scan | Google | none |
-| Qwen Code local scan | Qwen | none |
-| CSV import | any | none |
-| Anthropic Usage Admin API | Anthropic | admin key |
-| OpenAI organization usage | OpenAI | org admin key |
+    ---
 
-Each adapter states what it was verified against — see [Sources](sources.md). That matters more
-than a count: **an adapter that silently reads zeros is indistinguishable from a provider you never
-used.**
+    Seven sources across five vendors. Four need no credential at all, which is what makes this
+    work on a personal Pro/Max or ChatGPT plan — those have no usage API whatsoever.
+
+    [:octicons-arrow-right-24: Sources](sources.md)
+
+-   :material-chart-box:{ .lg .middle } **Shows where it went**
+
+    ---
+
+    Daily bars with a cumulative overlay, plus breakdowns by model, provider and project. Every
+    figure carries its band.
+
+    [:octicons-arrow-right-24: Dashboard](dashboard.md)
+
+-   :material-scale-balance:{ .lg .middle } **Says what it does not know**
+
+    ---
+
+    A scenario spread, not a confidence interval. Every adapter states what it was verified
+    against, and sources that cannot be read say so.
+
+    [:octicons-arrow-right-24: Methodology](methodology.md)
+
+-   :material-lock:{ .lg .middle } **Holds admin keys carefully**
+
+    ---
+
+    Envelope encryption with per-source data keys, nothing logged, no outbound calls, and no
+    telemetry on usage content.
+
+    [:octicons-arrow-right-24: Security](security.md)
+
+</div>
 
 ## Why the number is hard
 
 Water intensity is not a property of "an LLM call". It depends on whose data centres served it,
 what the local grid burns, and how the provider counts tokens. Three provider disagreements each
-cost roughly an order of magnitude if you get them backwards — that is what
-[Sources](sources.md) is mostly about.
+cost roughly an order of magnitude if you get them backwards — which is most of what
+[Sources](sources.md) is about.
 
 ## The rules this project lives by
 

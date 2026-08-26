@@ -7,8 +7,11 @@ copyright: Unchained Labs · Apache-2.0 · estimates, not measurements
 
 theme:
   name: material
-  icon:
-    logo: material/water
+  logo: assets/mark-accent.svg
+  favicon: assets/favicon.svg
+  # Brand fonts are loaded by extra.css, which needs all three faces —
+  # Material's own `font:` option only wires up two.
+  font: false
   # Dark first: every tool in this org is terminal-adjacent, and the brand
   # tokens are authored against a dark ground. Light is supported, not primary.
   palette:
@@ -23,9 +26,16 @@ theme:
         icon: material/brightness-7
         name: Dark mode
   features:
+    - navigation.instant
+    - navigation.tracking
     - navigation.sections
     - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
     - content.code.copy
+    - content.code.annotate
     - content.tabs.link
 
 extra_css:
@@ -45,6 +55,11 @@ nav:
 
 markdown_extensions:
   - admonition
+  # Resolves the :material-*: / :octicons-*: shortcodes into inline SVG. Without
+  # it Material's own icon syntax renders as literal text on the page.
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - attr_list
   - md_in_html
   - tables
