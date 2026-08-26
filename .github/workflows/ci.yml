@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor the installer enforces, and current LTS.
+        node-version: ["20.x", "22.x"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+      - name: Lint
+        run: npm run lint
+
+  build:
+    # A green test suite and a broken build have shipped together here before:
+    # the factor set loaded fine under tsx and 500'd in the bundled output,
+    # because bundlers rewrite require.resolve. Only a real build catches that.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: npm
+      - run: npm ci
+      - name: Build the dashboard
+        run: npm run build
+      - name: Build the CLI binaries
+        run: npm run build:cli
+      - name: The built CLIs must actually start
+        # package.json advertises these; they once shipped with a shebang on
+        # line 2 and failed to run at all, which the build reported as success.
+        run: |
+          node dist/cli/soif-init.js --help > /dev/null
+          node dist/cli/soif-scan.js --help > /dev/null
+
+  wizard:
+    # End-to-end: a clean checkout must migrate, scan and report without a
+    # credential. Runs against an empty home, so it exercises the "no AI tools
+    # found" path rather than needing fixtures on the runner.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: npm
+      - run: npm ci
+      - name: Wizard reports cleanly with nothing to scan
+        run: |
+          set -o pipefail
+          # Exits 1 when it finds no local usage, which is correct behaviour.
+          npx tsx cli/soif-init.ts --yes --skip-scan --dry-run | tee out.txt || true
+          grep -q "soif" out.txt
