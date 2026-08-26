@@ -506,19 +506,29 @@ function toMonthly(days: Array<[string, AggregateTotals]>): ChartPoint[] {
 }
 
 /**
- * The cheapest real saving available: usage on a model one tier above what the
- * registry says a lighter sibling from the same family would have cost.
+ * The cheapest real saving available: usage on a heavy model where a lighter
+ * sibling was already answering the same kind of work.
  *
- * Returns null rather than inventing a lever when there is nothing to say. A
- * dashboard that always finds a "biggest lever" is one that will eventually
- * fabricate one.
+ * This is the one figure on the page derived from a counterfactual rather than
+ * measured, so it is deliberately hard to satisfy:
+ *
+ *  - **Same vendor only.** Comparing `claude-opus` against `gemini-2.5-pro`
+ *    conflates a model-tier difference with a data-centre one — Google's fleet
+ *    WUE is ~6x AWS's — so the "saving" would be mostly geography, not choice.
+ *  - **The lighter model needs real usage.** Deriving an intensity from a
+ *    handful of calls and then projecting it across millions of tokens produces
+ *    a confident number from almost no evidence. It once claimed 67% of total
+ *    water against a model with 42 mL of usage.
+ *  - **Returns null when there is nothing to say.** A dashboard that always
+ *    finds a lever is one that will eventually invent one.
  */
 function biggestLever(
   byModel: Map<string, AggregateTotals>,
   registry: ReadonlyArray<{ match: string; tier: string }>,
 ): { from: string; to: string; savedMl: number; sharePct: string } | null {
   const total = [...byModel.values()].reduce((sum, g) => sum + g.totalMl.mid, 0);
-  if (total <= 0) return null;
+  const totalOutput = [...byModel.values()].reduce((sum, g) => sum + g.outputTokens, 0);
+  if (total <= 0 || totalOutput <= 0) return null;
 
   const tierRank = new Map(["nano", "small", "medium", "large", "frontier"].map((t, i) => [t, i]));
   const tierOf = (model: string) => {
@@ -532,31 +542,37 @@ function biggestLever(
     return best?.tier ?? null;
   };
 
-  // The heaviest model in use, and the lightest one already in use below it —
-  // a comparison grounded in this account's own behaviour rather than a
-  // hypothetical model it has never called.
+  /** A lighter model needs at least this share of output tokens to be evidence. */
+  const MIN_SHARE = 0.01;
+
   const used = [...byModel.entries()]
-    .map(([name, group]) => ({ name, group, rank: tierRank.get(tierOf(name) ?? "") ?? -1 }))
-    .filter((m) => m.rank >= 0);
+    .map(([name, group]) => ({
+      name,
+      group,
+      rank: tierRank.get(tierOf(name) ?? "") ?? -1,
+      vendor: vendorFromModel(name),
+      intensity: group.outputTokens > 0 ? group.totalMl.mid / group.outputTokens : 0,
+    }))
+    .filter((m) => m.rank >= 0 && m.intensity > 0);
   if (used.length < 2) return null;
 
   const heaviest = used.reduce((a, b) => (b.group.totalMl.mid > a.group.totalMl.mid ? b : a));
-  const lighter = used
-    .filter((m) => m.rank < heaviest.rank)
-    .sort((a, b) => b.rank - a.rank)[0];
+
+  // Same vendor, lighter tier, and enough usage of its own to mean something.
+  const candidates = used
+    .filter(
+      (m) =>
+        m.vendor === heaviest.vendor &&
+        m.rank < heaviest.rank &&
+        m.group.outputTokens / totalOutput >= MIN_SHARE &&
+        m.intensity < heaviest.intensity,
+    )
+    .sort((a, b) => b.rank - a.rank);
+
+  const lighter = candidates[0];
   if (!lighter) return null;
 
-  // Water scales with tier energy, so the saving is the share of the heavy
-  // model's water that the lighter tier would not have spent.
-  const lighterIntensity = lighter.group.outputTokens > 0
-    ? lighter.group.totalMl.mid / lighter.group.outputTokens
-    : 0;
-  const heavyIntensity = heaviest.group.outputTokens > 0
-    ? heaviest.group.totalMl.mid / heaviest.group.outputTokens
-    : 0;
-  if (lighterIntensity <= 0 || heavyIntensity <= lighterIntensity) return null;
-
-  const savedMl = (heavyIntensity - lighterIntensity) * heaviest.group.outputTokens;
+  const savedMl = (heaviest.intensity - lighter.intensity) * heaviest.group.outputTokens;
   if (savedMl <= 0) return null;
 
   return {
@@ -590,6 +606,7 @@ function describeSources(sources: SourceRow[]): string {
 
 const SOURCE_KIND_LABELS: Record<string, string> = {
   claude_code_local: "local scan",
+  codex_local: "Codex",
   anthropic_admin: "Anthropic Admin API",
   openai_admin: "OpenAI org usage",
   claude_enterprise: "Claude Enterprise",
