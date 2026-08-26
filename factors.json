@@ -1,0 +1,1356 @@
+{
+  "schema_version": "1.0",
+  "factors_version": "2026.08",
+  "soif_version": "0.1.0",
+  "source": "https://github.com/Unchained-Labs/soif",
+  "generated_by": "scripts/export_factors.py",
+  "notice": "Generated from src/soif/factors.py and src/soif/registry.py. Do not edit by hand — CI fails if this file drifts from the Python. All triples are (low, mid, high) scenario bounds, not confidence intervals. See METHODOLOGY.md.",
+  "model": {
+    "description": "E_it = (output + reasoning + input_token_factor * input + cached_token_factor * cached) / 1000 * wh_per_1k_output_tokens[tier]; E_facility = E_it * pue; W_onsite = E_it * wue; W_offsite = E_facility * ewif; W_embodied = (W_onsite + W_offsite) * (lifecycle_multiplier - 1); W_total = W_onsite + W_offsite + W_embodied.",
+    "units": {
+      "energy": "Wh",
+      "water": "mL",
+      "wue": "L/kWh of IT energy (1 L/kWh == 1 mL/Wh)",
+      "ewif": "L/kWh of electricity generated",
+      "pue": "dimensionless"
+    }
+  },
+  "tiers": {
+    "order": [
+      "nano",
+      "small",
+      "medium",
+      "large",
+      "frontier"
+    ],
+    "wh_per_1k_output_tokens": {
+      "nano": {
+        "low": 0.02,
+        "mid": 0.06,
+        "high": 0.15
+      },
+      "small": {
+        "low": 0.06,
+        "mid": 0.2,
+        "high": 0.5
+      },
+      "medium": {
+        "low": 0.15,
+        "mid": 0.5,
+        "high": 1.2
+      },
+      "large": {
+        "low": 0.3,
+        "mid": 0.8,
+        "high": 2.0
+      },
+      "frontier": {
+        "low": 0.8,
+        "mid": 2.0,
+        "high": 5.0
+      }
+    },
+    "boundaries_active_params_b": [
+      {
+        "tier": "nano",
+        "max_active_params_b": 3
+      },
+      {
+        "tier": "small",
+        "max_active_params_b": 15
+      },
+      {
+        "tier": "medium",
+        "max_active_params_b": 70
+      },
+      {
+        "tier": "large",
+        "max_active_params_b": 250
+      },
+      {
+        "tier": "frontier",
+        "max_active_params_b": null
+      }
+    ],
+    "fallback_tier": "large"
+  },
+  "token_weights": {
+    "input_token_factor": 0.1,
+    "cached_token_factor": 0.01,
+    "reasoning_token_factor": 1.0,
+    "default_output_tokens": 500,
+    "reasoning_effort_tokens_per_output": {
+      "high": 10.0,
+      "low": 1.0,
+      "medium": 4.0,
+      "none": 0.0
+    }
+  },
+  "providers": {
+    "average": {
+      "wue": {
+        "low": 0.3,
+        "mid": 1.0,
+        "high": 1.9
+      },
+      "pue": {
+        "low": 1.2,
+        "mid": 1.4,
+        "high": 1.6
+      }
+    },
+    "aws": {
+      "wue": {
+        "low": 0.1,
+        "mid": 0.18,
+        "high": 0.4
+      },
+      "pue": {
+        "low": 1.1,
+        "mid": 1.15,
+        "high": 1.25
+      }
+    },
+    "azure": {
+      "wue": {
+        "low": 0.3,
+        "mid": 0.49,
+        "high": 0.8
+      },
+      "pue": {
+        "low": 1.12,
+        "mid": 1.18,
+        "high": 1.3
+      }
+    },
+    "gcp": {
+      "wue": {
+        "low": 0.9,
+        "mid": 1.1,
+        "high": 1.4
+      },
+      "pue": {
+        "low": 1.09,
+        "mid": 1.1,
+        "high": 1.15
+      }
+    }
+  },
+  "default_provider": "average",
+  "regions": {
+    "asia": {
+      "low": 0.5,
+      "mid": 1.9,
+      "high": 3.5
+    },
+    "eu": {
+      "low": 0.3,
+      "mid": 1.2,
+      "high": 2.5
+    },
+    "france": {
+      "low": 0.5,
+      "mid": 1.5,
+      "high": 3.0
+    },
+    "nordics": {
+      "low": 0.05,
+      "mid": 0.3,
+      "high": 0.9
+    },
+    "renewable": {
+      "low": 0.001,
+      "mid": 0.1,
+      "high": 0.5
+    },
+    "us": {
+      "low": 0.5,
+      "mid": 1.6,
+      "high": 3.1
+    },
+    "world": {
+      "low": 0.4,
+      "mid": 1.5,
+      "high": 3.2
+    }
+  },
+  "default_region": "world",
+  "lifecycle_multiplier": {
+    "low": 1.1,
+    "mid": 1.5,
+    "high": 3.0
+  },
+  "registry": {
+    "normalisation": {
+      "lowercase": true,
+      "strip": true,
+      "replace": {
+        "_": "-",
+        " ": "-",
+        ".": "-"
+      }
+    },
+    "match_rule": "Normalise the model name and each spec's `match`, keep every spec whose normalised match is a substring of the normalised name, and take the one with the longest `match`. No match means fallback_tier with default_provider and default_region.",
+    "models": [
+      {
+        "match": "gpt-5-nano",
+        "tier": "nano",
+        "provider": "azure",
+        "region": "world"
+      },
+      {
+        "match": "gpt-5-mini",
+        "tier": "small",
+        "provider": "azure",
+        "region": "world"
+      },
+      {
+        "match": "gpt-5",
+        "tier": "frontier",
+        "provider": "azure",
+        "region": "world"
+      },
+      {
+        "match": "gpt-4.1-nano",
+        "tier": "nano",
+        "provider": "azure",
+        "region": "world"
+      },
+      {
+        "match": "gpt-4.1-mini",
+        "tier": "small",
+        "provider": "azure",
+        "region": "world"
+      },
+      {
+        "match": "gpt-4.1",
+        "tier": "large",
+        "provider": "azure",
+        "region": "world"
+      },
+      {
+        "match": "gpt-4o-mini",
+        "tier": "small",
+        "provider": "azure",
+        "region": "world"
+      },
+      {
+        "match": "gpt-4o",
+        "tier": "large",
+        "provider": "azure",
+        "region": "world"
+      },
+      {
+        "match": "o4-mini",
+        "tier": "medium",
+        "provider": "azure",
+        "region": "world"
+      },
+      {
+        "match": "o3-mini",
+        "tier": "medium",
+        "provider": "azure",
+        "region": "world"
+      },
+      {
+        "match": "o3",
+        "tier": "frontier",
+        "provider": "azure",
+        "region": "world"
+      },
+      {
+        "match": "o1-mini",
+        "tier": "medium",
+        "provider": "azure",
+        "region": "world"
+      },
+      {
+        "match": "o1",
+        "tier": "frontier",
+        "provider": "azure",
+        "region": "world"
+      },
+      {
+        "match": "claude-fable",
+        "tier": "frontier",
+        "provider": "aws",
+        "region": "world"
+      },
+      {
+        "match": "claude-mythos",
+        "tier": "frontier",
+        "provider": "aws",
+        "region": "world"
+      },
+      {
+        "match": "claude-opus",
+        "tier": "frontier",
+        "provider": "aws",
+        "region": "world"
+      },
+      {
+        "match": "claude-sonnet",
+        "tier": "large",
+        "provider": "aws",
+        "region": "world"
+      },
+      {
+        "match": "claude-haiku",
+        "tier": "medium",
+        "provider": "aws",
+        "region": "world"
+      },
+      {
+        "match": "claude-3-5-sonnet",
+        "tier": "large",
+        "provider": "aws",
+        "region": "world"
+      },
+      {
+        "match": "claude-3-5-haiku",
+        "tier": "medium",
+        "provider": "aws",
+        "region": "world"
+      },
+      {
+        "match": "gemini-2.5-flash-lite",
+        "tier": "nano",
+        "provider": "gcp",
+        "region": "world"
+      },
+      {
+        "match": "gemini-2.5-flash",
+        "tier": "small",
+        "provider": "gcp",
+        "region": "world"
+      },
+      {
+        "match": "gemini-2.5-pro",
+        "tier": "large",
+        "provider": "gcp",
+        "region": "world"
+      },
+      {
+        "match": "gemini-2.0-flash",
+        "tier": "small",
+        "provider": "gcp",
+        "region": "world"
+      },
+      {
+        "match": "gemini-1.5-flash",
+        "tier": "small",
+        "provider": "gcp",
+        "region": "world"
+      },
+      {
+        "match": "gemini-1.5-pro",
+        "tier": "large",
+        "provider": "gcp",
+        "region": "world"
+      },
+      {
+        "match": "gemma-2",
+        "tier": "small",
+        "provider": "average",
+        "region": "world"
+      },
+      {
+        "match": "gemma-3",
+        "tier": "small",
+        "provider": "average",
+        "region": "world"
+      },
+      {
+        "match": "llama-3.1-405b",
+        "tier": "frontier",
+        "provider": "average",
+        "region": "world"
+      },
+      {
+        "match": "llama-3.1-70b",
+        "tier": "large",
+        "provider": "average",
+        "region": "world"
+      },
+      {
+        "match": "llama-3.3-70b",
+        "tier": "large",
+        "provider": "average",
+        "region": "world"
+      },
+      {
+        "match": "llama-3.1-8b",
+        "tier": "small",
+        "provider": "average",
+        "region": "world"
+      },
+      {
+        "match": "llama-3.2-3b",
+        "tier": "small",
+        "provider": "average",
+        "region": "world"
+      },
+      {
+        "match": "llama-3.2-1b",
+        "tier": "nano",
+        "provider": "average",
+        "region": "world"
+      },
+      {
+        "match": "llama-4-maverick",
+        "tier": "medium",
+        "provider": "average",
+        "region": "world",
+        "notes": "MoE, ~17B active"
+      },
+      {
+        "match": "llama-4-scout",
+        "tier": "medium",
+        "provider": "average",
+        "region": "world",
+        "notes": "MoE, ~17B active"
+      },
+      {
+        "match": "mistral-large",
+        "tier": "large",
+        "provider": "average",
+        "region": "france"
+      },
+      {
+        "match": "mistral-medium",
+        "tier": "medium",
+        "provider": "average",
+        "region": "france"
+      },
+      {
+        "match": "mistral-small",
+        "tier": "medium",
+        "provider": "average",
+        "region": "france"
+      },
+      {
+        "match": "ministral",
+        "tier": "small",
+        "provider": "average",
+        "region": "france"
+      },
+      {
+        "match": "mixtral-8x22b",
+        "tier": "medium",
+        "provider": "average",
+        "region": "world",
+        "notes": "MoE, ~39B active"
+      },
+      {
+        "match": "mixtral-8x7b",
+        "tier": "small",
+        "provider": "average",
+        "region": "world",
+        "notes": "MoE, ~13B active"
+      },
+      {
+        "match": "deepseek-v3",
+        "tier": "medium",
+        "provider": "average",
+        "region": "asia"
+      },
+      {
+        "match": "deepseek-r1",
+        "tier": "medium",
+        "provider": "average",
+        "region": "asia",
+        "notes": "count reasoning tokens"
+      },
+      {
+        "match": "grok-4",
+        "tier": "frontier",
+        "provider": "average",
+        "region": "us"
+      },
+      {
+        "match": "grok-3",
+        "tier": "frontier",
+        "provider": "average",
+        "region": "us"
+      },
+      {
+        "match": "qwen3-235b",
+        "tier": "medium",
+        "provider": "average",
+        "region": "asia",
+        "notes": "MoE, ~22B active"
+      },
+      {
+        "match": "qwen3-32b",
+        "tier": "medium",
+        "provider": "average",
+        "region": "asia"
+      },
+      {
+        "match": "qwen3-8b",
+        "tier": "small",
+        "provider": "average",
+        "region": "asia"
+      }
+    ]
+  },
+  "parity_vectors": [
+    {
+      "id": "gpt-4o-typical",
+      "input": {
+        "output_tokens": 500,
+        "model": "gpt-4o"
+      },
+      "expected": {
+        "tier": "large",
+        "provider": "azure",
+        "region": "world",
+        "energy_it_wh": {
+          "low": 0.15,
+          "mid": 0.4,
+          "high": 1.0
+        },
+        "energy_facility_wh": {
+          "low": 0.168,
+          "mid": 0.472,
+          "high": 1.3
+        },
+        "onsite_ml": {
+          "low": 0.045,
+          "mid": 0.196,
+          "high": 0.8
+        },
+        "offsite_ml": {
+          "low": 0.0672,
+          "mid": 0.708,
+          "high": 4.16
+        },
+        "embodied_ml": {
+          "low": 0.01122,
+          "mid": 0.452,
+          "high": 9.92
+        },
+        "total_ml": {
+          "low": 0.12342,
+          "mid": 1.356,
+          "high": 14.88
+        }
+      }
+    },
+    {
+      "id": "gpt-4o-with-input",
+      "input": {
+        "input_tokens": 1200,
+        "output_tokens": 500,
+        "model": "gpt-4o"
+      },
+      "expected": {
+        "tier": "large",
+        "provider": "azure",
+        "region": "world",
+        "energy_it_wh": {
+          "low": 0.186,
+          "mid": 0.496,
+          "high": 1.24
+        },
+        "energy_facility_wh": {
+          "low": 0.20832,
+          "mid": 0.58528,
+          "high": 1.612
+        },
+        "onsite_ml": {
+          "low": 0.0558,
+          "mid": 0.24304,
+          "high": 0.992
+        },
+        "offsite_ml": {
+          "low": 0.083328,
+          "mid": 0.87792,
+          "high": 5.1584
+        },
+        "embodied_ml": {
+          "low": 0.0139128,
+          "mid": 0.56048,
+          "high": 12.3008
+        },
+        "total_ml": {
+          "low": 0.1530408,
+          "mid": 1.68144,
+          "high": 18.4512
+        }
+      }
+    },
+    {
+      "id": "cached-heavy-agentic",
+      "input": {
+        "input_tokens": 2,
+        "cached_tokens": 994232,
+        "output_tokens": 333,
+        "model": "claude-sonnet-4-5"
+      },
+      "expected": {
+        "tier": "large",
+        "provider": "aws",
+        "region": "world",
+        "energy_it_wh": {
+          "low": 3.082656,
+          "mid": 8.220416,
+          "high": 20.55104
+        },
+        "energy_facility_wh": {
+          "low": 3.3909216,
+          "mid": 9.4534784,
+          "high": 25.6888
+        },
+        "onsite_ml": {
+          "low": 0.3082656,
+          "mid": 1.47967488,
+          "high": 8.220416
+        },
+        "offsite_ml": {
+          "low": 1.35636864,
+          "mid": 14.1802176,
+          "high": 82.20416
+        },
+        "embodied_ml": {
+          "low": 0.166463424,
+          "mid": 7.82994624,
+          "high": 180.849152
+        },
+        "total_ml": {
+          "low": 1.831097664,
+          "mid": 23.48983872,
+          "high": 271.273728
+        }
+      }
+    },
+    {
+      "id": "reasoning-explicit",
+      "input": {
+        "output_tokens": 500,
+        "reasoning_tokens": 8000,
+        "model": "o3"
+      },
+      "expected": {
+        "tier": "frontier",
+        "provider": "azure",
+        "region": "world",
+        "energy_it_wh": {
+          "low": 6.8,
+          "mid": 17.0,
+          "high": 42.5
+        },
+        "energy_facility_wh": {
+          "low": 7.616,
+          "mid": 20.06,
+          "high": 55.25
+        },
+        "onsite_ml": {
+          "low": 2.04,
+          "mid": 8.33,
+          "high": 34.0
+        },
+        "offsite_ml": {
+          "low": 3.0464,
+          "mid": 30.09,
+          "high": 176.8
+        },
+        "embodied_ml": {
+          "low": 0.50864,
+          "mid": 19.21,
+          "high": 421.6
+        },
+        "total_ml": {
+          "low": 5.59504,
+          "mid": 57.63,
+          "high": 632.4
+        }
+      }
+    },
+    {
+      "id": "reasoning-effort-high",
+      "input": {
+        "output_tokens": 500,
+        "reasoning_effort": "high",
+        "model": "gpt-5"
+      },
+      "expected": {
+        "tier": "frontier",
+        "provider": "azure",
+        "region": "world",
+        "energy_it_wh": {
+          "low": 4.4,
+          "mid": 11.0,
+          "high": 27.5
+        },
+        "energy_facility_wh": {
+          "low": 4.928,
+          "mid": 12.98,
+          "high": 35.75
+        },
+        "onsite_ml": {
+          "low": 1.32,
+          "mid": 5.39,
+          "high": 22.0
+        },
+        "offsite_ml": {
+          "low": 1.9712,
+          "mid": 19.47,
+          "high": 114.4
+        },
+        "embodied_ml": {
+          "low": 0.32912,
+          "mid": 12.43,
+          "high": 272.8
+        },
+        "total_ml": {
+          "low": 3.62032,
+          "mid": 37.29,
+          "high": 409.2
+        }
+      }
+    },
+    {
+      "id": "opus-frontier-aws",
+      "input": {
+        "output_tokens": 1000,
+        "model": "claude-opus-4"
+      },
+      "expected": {
+        "tier": "frontier",
+        "provider": "aws",
+        "region": "world",
+        "energy_it_wh": {
+          "low": 0.8,
+          "mid": 2.0,
+          "high": 5.0
+        },
+        "energy_facility_wh": {
+          "low": 0.88,
+          "mid": 2.3,
+          "high": 6.25
+        },
+        "onsite_ml": {
+          "low": 0.08,
+          "mid": 0.36,
+          "high": 2.0
+        },
+        "offsite_ml": {
+          "low": 0.352,
+          "mid": 3.45,
+          "high": 20.0
+        },
+        "embodied_ml": {
+          "low": 0.0432,
+          "mid": 1.905,
+          "high": 44.0
+        },
+        "total_ml": {
+          "low": 0.4752,
+          "mid": 5.715,
+          "high": 66.0
+        }
+      }
+    },
+    {
+      "id": "haiku-medium-aws",
+      "input": {
+        "output_tokens": 1000,
+        "model": "claude-haiku-4-5"
+      },
+      "expected": {
+        "tier": "medium",
+        "provider": "aws",
+        "region": "world",
+        "energy_it_wh": {
+          "low": 0.15,
+          "mid": 0.5,
+          "high": 1.2
+        },
+        "energy_facility_wh": {
+          "low": 0.165,
+          "mid": 0.575,
+          "high": 1.5
+        },
+        "onsite_ml": {
+          "low": 0.015,
+          "mid": 0.09,
+          "high": 0.48
+        },
+        "offsite_ml": {
+          "low": 0.066,
+          "mid": 0.8625,
+          "high": 4.8
+        },
+        "embodied_ml": {
+          "low": 0.0081,
+          "mid": 0.47625,
+          "high": 10.56
+        },
+        "total_ml": {
+          "low": 0.0891,
+          "mid": 1.42875,
+          "high": 15.84
+        }
+      }
+    },
+    {
+      "id": "gemini-flash-gcp",
+      "input": {
+        "output_tokens": 500,
+        "model": "gemini-2.5-flash"
+      },
+      "expected": {
+        "tier": "small",
+        "provider": "gcp",
+        "region": "world",
+        "energy_it_wh": {
+          "low": 0.03,
+          "mid": 0.1,
+          "high": 0.25
+        },
+        "energy_facility_wh": {
+          "low": 0.0327,
+          "mid": 0.11,
+          "high": 0.2875
+        },
+        "onsite_ml": {
+          "low": 0.027,
+          "mid": 0.11,
+          "high": 0.35
+        },
+        "offsite_ml": {
+          "low": 0.01308,
+          "mid": 0.165,
+          "high": 0.92
+        },
+        "embodied_ml": {
+          "low": 0.004008,
+          "mid": 0.1375,
+          "high": 2.54
+        },
+        "total_ml": {
+          "low": 0.044088,
+          "mid": 0.4125,
+          "high": 3.81
+        }
+      }
+    },
+    {
+      "id": "gemini-flash-lite-nano",
+      "input": {
+        "output_tokens": 500,
+        "model": "gemini-2.5-flash-lite"
+      },
+      "expected": {
+        "tier": "nano",
+        "provider": "gcp",
+        "region": "world",
+        "energy_it_wh": {
+          "low": 0.01,
+          "mid": 0.03,
+          "high": 0.075
+        },
+        "energy_facility_wh": {
+          "low": 0.0109,
+          "mid": 0.033,
+          "high": 0.08625
+        },
+        "onsite_ml": {
+          "low": 0.009,
+          "mid": 0.033,
+          "high": 0.105
+        },
+        "offsite_ml": {
+          "low": 0.00436,
+          "mid": 0.0495,
+          "high": 0.276
+        },
+        "embodied_ml": {
+          "low": 0.001336,
+          "mid": 0.04125,
+          "high": 0.762
+        },
+        "total_ml": {
+          "low": 0.014696,
+          "mid": 0.12375,
+          "high": 1.143
+        }
+      }
+    },
+    {
+      "id": "mistral-large-france",
+      "input": {
+        "output_tokens": 500,
+        "model": "mistral-large"
+      },
+      "expected": {
+        "tier": "large",
+        "provider": "average",
+        "region": "france",
+        "energy_it_wh": {
+          "low": 0.15,
+          "mid": 0.4,
+          "high": 1.0
+        },
+        "energy_facility_wh": {
+          "low": 0.18,
+          "mid": 0.56,
+          "high": 1.6
+        },
+        "onsite_ml": {
+          "low": 0.045,
+          "mid": 0.4,
+          "high": 1.9
+        },
+        "offsite_ml": {
+          "low": 0.09,
+          "mid": 0.84,
+          "high": 4.8
+        },
+        "embodied_ml": {
+          "low": 0.0135,
+          "mid": 0.62,
+          "high": 13.4
+        },
+        "total_ml": {
+          "low": 0.1485,
+          "mid": 1.86,
+          "high": 20.1
+        }
+      }
+    },
+    {
+      "id": "deepseek-v3-asia",
+      "input": {
+        "output_tokens": 500,
+        "model": "deepseek-v3"
+      },
+      "expected": {
+        "tier": "medium",
+        "provider": "average",
+        "region": "asia",
+        "energy_it_wh": {
+          "low": 0.075,
+          "mid": 0.25,
+          "high": 0.6
+        },
+        "energy_facility_wh": {
+          "low": 0.09,
+          "mid": 0.35,
+          "high": 0.96
+        },
+        "onsite_ml": {
+          "low": 0.0225,
+          "mid": 0.25,
+          "high": 1.14
+        },
+        "offsite_ml": {
+          "low": 0.045,
+          "mid": 0.665,
+          "high": 3.36
+        },
+        "embodied_ml": {
+          "low": 0.00675,
+          "mid": 0.4575,
+          "high": 9.0
+        },
+        "total_ml": {
+          "low": 0.07425,
+          "mid": 1.3725,
+          "high": 13.5
+        }
+      }
+    },
+    {
+      "id": "grok-4-us",
+      "input": {
+        "output_tokens": 500,
+        "model": "grok-4"
+      },
+      "expected": {
+        "tier": "frontier",
+        "provider": "average",
+        "region": "us",
+        "energy_it_wh": {
+          "low": 0.4,
+          "mid": 1.0,
+          "high": 2.5
+        },
+        "energy_facility_wh": {
+          "low": 0.48,
+          "mid": 1.4,
+          "high": 4.0
+        },
+        "onsite_ml": {
+          "low": 0.12,
+          "mid": 1.0,
+          "high": 4.75
+        },
+        "offsite_ml": {
+          "low": 0.24,
+          "mid": 2.24,
+          "high": 12.4
+        },
+        "embodied_ml": {
+          "low": 0.036,
+          "mid": 1.62,
+          "high": 34.3
+        },
+        "total_ml": {
+          "low": 0.396,
+          "mid": 4.86,
+          "high": 51.45
+        }
+      }
+    },
+    {
+      "id": "unknown-model-fallback",
+      "input": {
+        "output_tokens": 500,
+        "model": "totally-made-up-model"
+      },
+      "expected": {
+        "tier": "large",
+        "provider": "average",
+        "region": "world",
+        "energy_it_wh": {
+          "low": 0.15,
+          "mid": 0.4,
+          "high": 1.0
+        },
+        "energy_facility_wh": {
+          "low": 0.18,
+          "mid": 0.56,
+          "high": 1.6
+        },
+        "onsite_ml": {
+          "low": 0.045,
+          "mid": 0.4,
+          "high": 1.9
+        },
+        "offsite_ml": {
+          "low": 0.072,
+          "mid": 0.84,
+          "high": 5.12
+        },
+        "embodied_ml": {
+          "low": 0.0117,
+          "mid": 0.62,
+          "high": 14.04
+        },
+        "total_ml": {
+          "low": 0.1287,
+          "mid": 1.86,
+          "high": 21.06
+        }
+      }
+    },
+    {
+      "id": "no-model-at-all",
+      "input": {
+        "output_tokens": 500
+      },
+      "expected": {
+        "tier": "large",
+        "provider": "average",
+        "region": "world",
+        "energy_it_wh": {
+          "low": 0.15,
+          "mid": 0.4,
+          "high": 1.0
+        },
+        "energy_facility_wh": {
+          "low": 0.18,
+          "mid": 0.56,
+          "high": 1.6
+        },
+        "onsite_ml": {
+          "low": 0.045,
+          "mid": 0.4,
+          "high": 1.9
+        },
+        "offsite_ml": {
+          "low": 0.072,
+          "mid": 0.84,
+          "high": 5.12
+        },
+        "embodied_ml": {
+          "low": 0.0117,
+          "mid": 0.62,
+          "high": 14.04
+        },
+        "total_ml": {
+          "low": 0.1287,
+          "mid": 1.86,
+          "high": 21.06
+        }
+      }
+    },
+    {
+      "id": "region-nordics-override",
+      "input": {
+        "output_tokens": 500,
+        "provider": "aws",
+        "region": "nordics",
+        "model": "llama-3.1-70b"
+      },
+      "expected": {
+        "tier": "large",
+        "provider": "aws",
+        "region": "nordics",
+        "energy_it_wh": {
+          "low": 0.15,
+          "mid": 0.4,
+          "high": 1.0
+        },
+        "energy_facility_wh": {
+          "low": 0.165,
+          "mid": 0.46,
+          "high": 1.25
+        },
+        "onsite_ml": {
+          "low": 0.015,
+          "mid": 0.072,
+          "high": 0.4
+        },
+        "offsite_ml": {
+          "low": 0.00825,
+          "mid": 0.138,
+          "high": 1.125
+        },
+        "embodied_ml": {
+          "low": 0.002325,
+          "mid": 0.105,
+          "high": 3.05
+        },
+        "total_ml": {
+          "low": 0.025575,
+          "mid": 0.315,
+          "high": 4.575
+        }
+      }
+    },
+    {
+      "id": "region-renewable-operational-only",
+      "input": {
+        "output_tokens": 500,
+        "region": "renewable",
+        "include_embodied": false,
+        "model": "gpt-4o"
+      },
+      "expected": {
+        "tier": "large",
+        "provider": "azure",
+        "region": "renewable",
+        "energy_it_wh": {
+          "low": 0.15,
+          "mid": 0.4,
+          "high": 1.0
+        },
+        "energy_facility_wh": {
+          "low": 0.168,
+          "mid": 0.472,
+          "high": 1.3
+        },
+        "onsite_ml": {
+          "low": 0.045,
+          "mid": 0.196,
+          "high": 0.8
+        },
+        "offsite_ml": {
+          "low": 0.000168,
+          "mid": 0.0472,
+          "high": 0.65
+        },
+        "embodied_ml": {
+          "low": 0.0,
+          "mid": 0.0,
+          "high": 0.0
+        },
+        "total_ml": {
+          "low": 0.045168,
+          "mid": 0.2432,
+          "high": 1.45
+        }
+      }
+    },
+    {
+      "id": "raw-factor-overrides",
+      "input": {
+        "output_tokens": 500,
+        "active_params_b": 8,
+        "wue": 0.2,
+        "pue": 1.12,
+        "ewif": 0.4,
+        "model": "my-fine-tune"
+      },
+      "expected": {
+        "tier": "small",
+        "provider": "average",
+        "region": "world",
+        "energy_it_wh": {
+          "low": 0.03,
+          "mid": 0.1,
+          "high": 0.25
+        },
+        "energy_facility_wh": {
+          "low": 0.0336,
+          "mid": 0.112,
+          "high": 0.28
+        },
+        "onsite_ml": {
+          "low": 0.006,
+          "mid": 0.02,
+          "high": 0.05
+        },
+        "offsite_ml": {
+          "low": 0.01344,
+          "mid": 0.0448,
+          "high": 0.112
+        },
+        "embodied_ml": {
+          "low": 0.001944,
+          "mid": 0.0324,
+          "high": 0.324
+        },
+        "total_ml": {
+          "low": 0.021384,
+          "mid": 0.0972,
+          "high": 0.486
+        }
+      }
+    },
+    {
+      "id": "explicit-tier-nano-azure-eu",
+      "input": {
+        "output_tokens": 500,
+        "tier": "nano",
+        "provider": "azure",
+        "region": "eu"
+      },
+      "expected": {
+        "tier": "nano",
+        "provider": "azure",
+        "region": "eu",
+        "energy_it_wh": {
+          "low": 0.01,
+          "mid": 0.03,
+          "high": 0.075
+        },
+        "energy_facility_wh": {
+          "low": 0.0112,
+          "mid": 0.0354,
+          "high": 0.0975
+        },
+        "onsite_ml": {
+          "low": 0.003,
+          "mid": 0.0147,
+          "high": 0.06
+        },
+        "offsite_ml": {
+          "low": 0.00336,
+          "mid": 0.04248,
+          "high": 0.24375
+        },
+        "embodied_ml": {
+          "low": 0.000636,
+          "mid": 0.02859,
+          "high": 0.6075
+        },
+        "total_ml": {
+          "low": 0.006996,
+          "mid": 0.08577,
+          "high": 0.91125
+        }
+      }
+    },
+    {
+      "id": "provider-average-world",
+      "input": {
+        "output_tokens": 500,
+        "tier": "medium",
+        "provider": "average",
+        "region": "world"
+      },
+      "expected": {
+        "tier": "medium",
+        "provider": "average",
+        "region": "world",
+        "energy_it_wh": {
+          "low": 0.075,
+          "mid": 0.25,
+          "high": 0.6
+        },
+        "energy_facility_wh": {
+          "low": 0.09,
+          "mid": 0.35,
+          "high": 0.96
+        },
+        "onsite_ml": {
+          "low": 0.0225,
+          "mid": 0.25,
+          "high": 1.14
+        },
+        "offsite_ml": {
+          "low": 0.036,
+          "mid": 0.525,
+          "high": 3.072
+        },
+        "embodied_ml": {
+          "low": 0.00585,
+          "mid": 0.3875,
+          "high": 8.424
+        },
+        "total_ml": {
+          "low": 0.06435,
+          "mid": 1.1625,
+          "high": 12.636
+        }
+      }
+    },
+    {
+      "id": "zero-output-input-only",
+      "input": {
+        "input_tokens": 10000,
+        "output_tokens": 0,
+        "model": "gpt-4o"
+      },
+      "expected": {
+        "tier": "large",
+        "provider": "azure",
+        "region": "world",
+        "energy_it_wh": {
+          "low": 0.3,
+          "mid": 0.8,
+          "high": 2.0
+        },
+        "energy_facility_wh": {
+          "low": 0.336,
+          "mid": 0.944,
+          "high": 2.6
+        },
+        "onsite_ml": {
+          "low": 0.09,
+          "mid": 0.392,
+          "high": 1.6
+        },
+        "offsite_ml": {
+          "low": 0.1344,
+          "mid": 1.416,
+          "high": 8.32
+        },
+        "embodied_ml": {
+          "low": 0.02244,
+          "mid": 0.904,
+          "high": 19.84
+        },
+        "total_ml": {
+          "low": 0.24684,
+          "mid": 2.712,
+          "high": 29.76
+        }
+      }
+    }
+  ]
+}
