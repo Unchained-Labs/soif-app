@@ -20,10 +20,12 @@ import {
   EmbodiedToggle,
   ModelBars,
   RangeToggle,
+  RankedBars,
   SERIES_COLORS,
   SplitStack,
-  type ModelDatum,
+  type RankedDatum,
 } from "@/components/Panels";
+import { VENDOR_LABELS, vendorFromModel, type VendorId } from "@/lib/sources/providers";
 
 /**
  * The dashboard.
@@ -94,7 +96,7 @@ export default async function Page({ searchParams }: PageProps) {
   // lifetime range without dropping data.
   const points: ChartPoint[] = days.length > 90 ? toMonthly(days) : toDaily(days);
 
-  const models: ModelDatum[] = [...byModel.entries()]
+  const models: RankedDatum[] = [...byModel.entries()]
     .map(([name, group], i) => ({
       name,
       ml: group.totalMl.mid,
@@ -104,6 +106,36 @@ export default async function Page({ searchParams }: PageProps) {
     }))
     .sort((a, b) => b.ml - a.ml)
     .slice(0, 6);
+
+  // Provider breakdown. Derived from the model name rather than stored, so it
+  // can never drift from soif's own registry — which is what decides the
+  // data-centre preset (Azure vs AWS vs GCP) and therefore the water intensity.
+  const byVendor = estimateGrouped(records, (r) => vendorFromModel(r.model), factors, options);
+  const providers: RankedDatum[] = [...byVendor.entries()]
+    .map(([vendor, group], i) => ({
+      name: VENDOR_LABELS[vendor as VendorId] ?? vendor,
+      ml: group.totalMl.mid,
+      outputTokens: group.outputTokens,
+      cachedTokens: group.cachedTokens,
+      color: SERIES_COLORS[i % SERIES_COLORS.length]!,
+    }))
+    .sort((a, b) => b.ml - a.ml);
+
+  // Project breakdown, from the working directory each call was made in.
+  // Records predating the project column, and API sources that have no notion
+  // of one, are grouped honestly as unattributed rather than dropped.
+  const byProject = estimateGrouped(records, (r) => r.project ?? "\u0000unattributed", factors, options);
+  const projects: RankedDatum[] = [...byProject.entries()]
+    .map(([path, group], i) => ({
+      name: path === "\u0000unattributed" ? "Not attributed" : projectLabel(path),
+      title: path === "\u0000unattributed" ? "Records from sources with no project context" : path,
+      ml: group.totalMl.mid,
+      outputTokens: group.outputTokens,
+      cachedTokens: group.cachedTokens,
+      color: SERIES_COLORS[i % SERIES_COLORS.length]!,
+    }))
+    .sort((a, b) => b.ml - a.ml)
+    .slice(0, 8);
 
   const splits = [
     { name: "Off-site — power generation", ml: totals.offsiteMl.mid, color: "var(--seq-3)" },
@@ -243,6 +275,28 @@ export default async function Page({ searchParams }: PageProps) {
             <h3>Where the water goes</h3>
             <p className="sub">Not all of it evaporates in a cooling tower.</p>
             <SplitStack parts={splits} />
+          </div>
+        </div>
+
+        <div className="row k2">
+          <div className="card">
+            <h3>Which projects drank it</h3>
+            <p className="sub">
+              By the working directory each call was made in.
+              {projects.length === 8 ? " Top 8." : ""}
+            </p>
+            <RankedBars
+              items={projects}
+              empty="No project information in this range. Local scans record it; API sources have none."
+            />
+          </div>
+          <div className="card">
+            <h3>Which providers drank it</h3>
+            <p className="sub">
+              Water intensity differs by where a model is served — Azure, AWS and Google&apos;s fleet
+              report WUE figures that span roughly 6x.
+            </p>
+            <RankedBars items={providers} empty="No provider usage in this range." />
           </div>
         </div>
 
@@ -541,6 +595,19 @@ const SOURCE_KIND_LABELS: Record<string, string> = {
   claude_enterprise: "Claude Enterprise",
   csv: "CSV import",
 };
+
+/**
+ * Shorten a working directory to something readable in a bar label.
+ *
+ * The last two path segments are usually enough to identify a project while
+ * staying distinguishable — `dev/soif-app` rather than the whole home path —
+ * and the full path stays available on hover.
+ */
+function projectLabel(path: string): string {
+  const parts = path.split(/[/\\]/).filter(Boolean);
+  if (parts.length === 0) return path;
+  return parts.slice(-2).join("/");
+}
 
 /** Split "531 L" into ["531", "L"] so the unit can be styled down. */
 function splitMeasure(text: string): [string, string] {

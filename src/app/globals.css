@@ -715,6 +715,12 @@ h3 {
   gap: 7px;
   min-width: 0;
 }
+/* Project labels can be long paths; truncate rather than wrap the row. */
+.mrow .mtrunc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .swatch {
   width: 9px;
   height: 9px;

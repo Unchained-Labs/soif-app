@@ -10,40 +10,54 @@ import { formatWater } from "@/lib/format";
  * a hydration failure costs motion rather than accuracy.
  */
 
-export interface ModelDatum {
+export interface RankedDatum {
+  /** Display label. */
   name: string;
+  /** Full value behind the label, for the tooltip — e.g. a project's full path. */
+  title?: string;
   ml: number;
   outputTokens: number;
   cachedTokens: number;
   color: string;
 }
 
+/** Kept as an alias so existing call sites read naturally. */
+export type ModelDatum = RankedDatum;
+
 /** Categorical series colours, in assignment order. */
 export const SERIES_COLORS = ["var(--s1)", "var(--s3)", "var(--s2)", "var(--s4)"] as const;
 
-export function ModelBars({ models }: { models: ModelDatum[] }) {
+/**
+ * Ranked horizontal bars, used for the model, provider and project breakdowns.
+ *
+ * Bars are scaled against the largest item rather than the total, because these
+ * distributions are extremely long-tailed — one model is routinely 80% of the
+ * water — and a total-relative scale renders everything else as an invisible
+ * sliver.
+ */
+export function RankedBars({ items, empty }: { items: RankedDatum[]; empty?: string }) {
   // Widths are the resting style, not an animated-to state: the bars must be
-  // right in the server-rendered HTML, with the grow animation layered on top.
-  if (models.length === 0) return <p className="cap">No model usage in this range.</p>;
-  const max = Math.max(...models.map((m) => m.ml)) || 1;
+  // right in the server-rendered HTML.
+  if (items.length === 0) return <p className="cap">{empty ?? "Nothing in this range."}</p>;
+  const max = Math.max(...items.map((m) => m.ml)) || 1;
 
   return (
     <div className="mbar">
-      {models.map((model) => (
-        <div className="mrow" key={model.name}>
+      {items.map((item) => (
+        <div className="mrow" key={item.name}>
           <div className="mtop">
-            <div className="mname">
-              <span className="swatch" style={{ background: model.color }} />
-              {model.name}
+            <div className="mname" title={item.title ?? item.name}>
+              <span className="swatch" style={{ background: item.color }} />
+              <span className="mtrunc">{item.name}</span>
             </div>
-            <div className="mval">{formatWater(model.ml)}</div>
+            <div className="mval">{formatWater(item.ml)}</div>
           </div>
           <div className="track">
             <div
               className="fillbar"
               style={{
-                width: `${((model.ml / max) * 100).toFixed(1)}%`,
-                background: model.color,
+                width: `${((item.ml / max) * 100).toFixed(1)}%`,
+                background: item.color,
               }}
             />
           </div>
@@ -51,6 +65,11 @@ export function ModelBars({ models }: { models: ModelDatum[] }) {
       ))}
     </div>
   );
+}
+
+/** Back-compat wrapper so the models card reads as itself. */
+export function ModelBars({ models }: { models: RankedDatum[] }) {
+  return <RankedBars items={models} empty="No model usage in this range." />;
 }
 
 export interface SplitDatum {

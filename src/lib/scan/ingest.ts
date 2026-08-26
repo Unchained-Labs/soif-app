@@ -2,6 +2,12 @@ import { stat } from "node:fs/promises";
 import type { Repository, UsageRecordInput } from "@/lib/db/repository";
 import { parseTranscript, reconcileRows, type ClaudeUsageRow } from "./claude";
 import { discoverRoots, listTranscripts, type ScanRoot } from "./roots";
+import {
+  discoverCodexRoots,
+  listCodexSessions,
+  parseCodexSession,
+  type CodexRoot,
+} from "./codex";
 
 /**
  * Turning a transcript scan into stored usage records.
@@ -25,8 +31,12 @@ export interface IngestProgress {
 }
 
 export interface IngestOptions {
-  /** Restrict to specific roots. Omit to discover them. */
+  /** Restrict to specific Claude Code roots. Omit to discover them. */
   roots?: ScanRoot[];
+  /** Restrict to specific Codex homes. Omit to discover them. */
+  codexRoots?: CodexRoot[];
+  /** Set false to skip the Codex scan entirely. */
+  includeCodex?: boolean;
   /** Ignore stored cursors and re-read every transcript from byte zero. */
   full?: boolean;
   onProgress?: (progress: IngestProgress) => void;
@@ -45,11 +55,20 @@ export interface IngestWarnings {
   rowsFromIterations: number;
   /** Files whose cursor was reset because the file had shrunk. */
   cursorsReset: number;
+  /** Codex usage events with no resolvable model name. */
+  unknownModelEvents: number;
+  /** Codex sessions that reported only a cumulative total, not per-turn deltas. */
+  rowsFromSessionTotal: number;
 }
 
+/** What every local provider reports back, whatever it scanned. */
 export interface IngestResult {
   sourceId: string;
-  root: ScanRoot;
+  kind: "claude_code_local" | "codex_local";
+  /** Directory scanned, for the CLI to name. */
+  rootPath: string;
+  /** Non-secret account label, when the provider exposes one. */
+  account: object | null;
   filesScanned: number;
   bytesScanned: number;
   rowsParsed: number;
@@ -66,18 +85,36 @@ const EMPTY_WARNINGS: IngestWarnings = {
   emptyUsageLines: 0,
   rowsFromIterations: 0,
   cursorsReset: 0,
+  unknownModelEvents: 0,
+  rowsFromSessionTotal: 0,
 };
 
-/** Scan every discovered root and persist what it finds. */
+/**
+ * Scan every local provider on this machine and persist what they report.
+ *
+ * Providers are independent: a machine with Claude Code but no Codex simply
+ * yields fewer results, and a failure in one does not abort the others. That
+ * matters because the dashboard is only honest if it shows what it *could*
+ * read, and a single broken source silently zeroing the whole scan would be
+ * worse than a partial answer clearly labelled.
+ */
 export async function ingestLocalScan(
   repository: Repository,
   options: IngestOptions = {},
 ): Promise<IngestResult[]> {
-  const roots = options.roots ?? (await discoverRoots());
   const results: IngestResult[] = [];
-  for (const root of roots) {
+
+  const claudeRoots = options.roots ?? (await discoverRoots());
+  for (const root of claudeRoots) {
     results.push(await ingestRoot(repository, root, options));
   }
+
+  if (options.includeCodex !== false) {
+    for (const root of options.codexRoots ?? (await discoverCodexRoots())) {
+      results.push(await ingestCodexRoot(repository, root, options));
+    }
+  }
+
   return results;
 }
 
@@ -171,7 +208,9 @@ export async function ingestRoot(
 
     return {
       sourceId,
-      root,
+      kind: "claude_code_local",
+      rootPath: root.path,
+      account: root.account ?? null,
       filesScanned,
       bytesScanned,
       rowsParsed: rows.length,
@@ -215,6 +254,7 @@ export function toUsageRecord(row: ClaudeUsageRow, sourceId: string): UsageRecor
     serviceTier: row.serviceTier,
     sessionId: row.sessionId,
     sourceFile: row.sourceFile,
+    project: row.project,
   };
 }
 
@@ -237,4 +277,131 @@ function syntheticKey(row: ClaudeUsageRow): string {
     row.cacheCreationTokens,
     row.outputTokens,
   ].join("|");
+}
+
+/**
+ * Scan one Codex home.
+ *
+ * Structurally the same contract as the Claude path — one source per home, byte
+ * cursors per rollout, idempotent inserts — but the rows need no cross-file
+ * reconciliation: Codex rollouts do not duplicate each other's turns the way a
+ * Claude subagent transcript duplicates its parent's messages.
+ */
+export async function ingestCodexRoot(
+  repository: Repository,
+  root: CodexRoot,
+  options: IngestOptions = {},
+): Promise<IngestResult> {
+  const label = root.codexHome;
+  const existing = await repository.findSource("codex_local", label);
+  const sourceId = await repository.upsertSource({
+    id: existing?.id,
+    kind: "codex_local",
+    label,
+    account: root.account ?? null,
+  });
+
+  const runId = await repository.startSyncRun(sourceId);
+  const warnings: IngestWarnings = { ...EMPTY_WARNINGS };
+  let bytesScanned = 0;
+  let filesScanned = 0;
+  const records: UsageRecordInput[] = [];
+
+  try {
+    const files = await listCodexSessions(root.codexHome);
+
+    for (const file of files) {
+      if (options.signal?.aborted) throw new DOMException("Ingest aborted", "AbortError");
+      options.onProgress?.({ filesTotal: files.length, filesScanned, currentFile: file });
+
+      const info = await stat(file).catch(() => null);
+      if (!info) continue;
+
+      const cursor = options.full ? null : await repository.getCursor(sourceId, file);
+      let offset = cursor?.committedOffset ?? 0;
+      if (offset > info.size) {
+        offset = 0;
+        warnings.cursorsReset += 1;
+      }
+      if (
+        cursor &&
+        offset === info.size &&
+        cursor.fileSize === info.size &&
+        cursor.mtimeMs === Math.trunc(info.mtimeMs)
+      ) {
+        filesScanned += 1;
+        continue;
+      }
+
+      const parsed = await parseCodexSession(file, { offset, signal: options.signal });
+      bytesScanned += parsed.scan.readOffset - offset;
+      filesScanned += 1;
+
+      warnings.linesSkippedTooLong += parsed.scan.linesSkippedTooLong;
+      warnings.linesSkippedPossiblyRelevant += parsed.scan.linesSkippedPossiblyRelevant;
+      warnings.malformedLines += parsed.malformedLines;
+      warnings.unknownModelEvents += parsed.unknownModelEvents;
+      warnings.rowsFromSessionTotal += parsed.rows.filter((r) => r.fromSessionTotal).length;
+
+      for (const row of parsed.rows) {
+        const at = new Date(row.timestamp);
+        records.push({
+          sourceId,
+          dedupeKey: row.dedupeKey,
+          bucketStart: at,
+          bucketEnd: at,
+          granularity: "message",
+          dayKey: row.dayKey,
+          model: row.model,
+          inputTokens: row.tokens.inputTokens,
+          cachedTokens: row.tokens.cachedTokens,
+          cacheCreationTokens: row.tokens.cacheCreationTokens,
+          outputTokens: row.tokens.outputTokens,
+          reasoningTokens: row.tokens.reasoningTokens,
+          // Codex reports no inference geography, so the region falls back to
+          // the model's registry default rather than being guessed.
+          inferenceGeo: null,
+          sessionId: row.sessionId,
+          sourceFile: row.sourceFile,
+          project: row.project,
+        });
+      }
+
+      await repository.saveCursor({
+        sourceId,
+        filePath: file,
+        committedOffset: parsed.scan.committedOffset,
+        fileSize: info.size,
+        mtimeMs: Math.trunc(info.mtimeMs),
+      });
+    }
+
+    const recordsInserted = await repository.insertUsageRecords(records);
+
+    await repository.finishSyncRun(runId, {
+      status: warnings.linesSkippedPossiblyRelevant > 0 ? "partial" : "ok",
+      recordsIngested: recordsInserted,
+      bytesScanned,
+      warnings: warnings as unknown as Record<string, number>,
+    });
+    await repository.markSourceSynced(sourceId, null);
+
+    return {
+      sourceId,
+      kind: "codex_local",
+      rootPath: root.codexHome,
+      account: root.account ?? null,
+      filesScanned,
+      bytesScanned,
+      rowsParsed: records.length,
+      rowsCollapsed: 0,
+      recordsInserted,
+      warnings,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await repository.finishSyncRun(runId, { status: "error", error: message, bytesScanned });
+    await repository.markSourceSynced(sourceId, message);
+    throw error;
+  }
 }

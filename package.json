@@ -9,6 +9,7 @@
     "node": ">=20"
   },
   "bin": {
+    "soif-init": "./dist/cli/soif-init.js",
     "soif-scan": "./dist/cli/soif-scan.js"
   },
   "scripts": {
@@ -23,7 +24,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "sync:factors": "tsx scripts/sync-factors.ts",
-    "build:cli": "tsup"
+    "build:cli": "tsup",
+    "init": "tsx cli/soif-init.ts",
+    "setup": "npm install && npm run init"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",
@@ -48,5 +51,12 @@
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
-  }
+  },
+  "files": [
+    "dist",
+    "drizzle",
+    "factors.json",
+    "README.md",
+    "LICENSE"
+  ]
 }

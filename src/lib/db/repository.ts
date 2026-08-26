@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { DatabaseHandle } from "./client";
+import type { SourceKind } from "@/lib/sources/providers";
 
 /**
  * The query surface the app uses, over either dialect.
@@ -37,6 +38,8 @@ export interface UsageRecordInput {
   apiKeyId?: string | null;
   sessionId?: string | null;
   sourceFile?: string | null;
+  /** Working directory the call was made from, as a project label. */
+  project?: string | null;
 }
 
 /**
@@ -66,6 +69,7 @@ export interface UsageRecordRow {
   apiKeyId: string | null;
   sessionId: string | null;
   sourceFile: string | null;
+  project: string | null;
 }
 
 /** A source as the dashboard sees it: never carrying the sealed credential. */
@@ -84,7 +88,7 @@ export interface SourceRow {
 
 export interface SourceInput {
   id?: string;
-  kind: "anthropic_admin" | "claude_code_local" | "openai_admin" | "claude_enterprise" | "csv";
+  kind: SourceKind;
   label: string;
   credentialCipher?: string | null;
   credentialKeyId?: string | null;
@@ -242,6 +246,7 @@ export class Repository {
         apiKeyId: r.apiKeyId ?? null,
         sessionId: r.sessionId ?? null,
         sourceFile: r.sourceFile ?? null,
+        project: r.project ?? null,
       }));
 
       const result = await this.db
