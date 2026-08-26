@@ -13,3 +13,5 @@ data/
 coverage/
 .DS_Store
 tsconfig.tsbuildinfo
+
+site/
