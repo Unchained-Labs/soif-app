@@ -68,3 +68,7 @@ jobs:
           # Exits 1 when it finds no local usage, which is correct behaviour.
           npx tsx cli/soif-init.ts --yes --skip-scan --dry-run | tee out.txt || true
           grep -q "soif" out.txt
+      - name: Install script is valid shell
+        # It is the documented entry point, so a syntax error in it breaks the
+        # first thing anyone runs — and nothing else in the suite would catch it.
+        run: bash -n scripts/install.sh

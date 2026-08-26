@@ -26,7 +26,8 @@
     "sync:factors": "tsx scripts/sync-factors.ts",
     "build:cli": "tsup",
     "init": "tsx cli/soif-init.ts",
-    "setup": "npm install && npm run init"
+    "setup": "npm install && tsx cli/soif-init.ts --serve",
+    "setup:only": "npm install && tsx cli/soif-init.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",
