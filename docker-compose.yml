@@ -33,10 +33,14 @@ services:
       #   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
       SOIF_ENCRYPTION_KEY: ${SOIF_ENCRYPTION_KEY:?set SOIF_ENCRYPTION_KEY in .env}
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${SOIF_PORT:-3000}:3000"
     volumes:
       # The host's Claude Code transcripts, read-only, so the container can run
       # a local scan without any ability to modify them.
+      # NOTE: set CLAUDE_CONFIG_DIR to an ABSOLUTE path. Compose does not
+      # expand `~` in a volume source — it creates a directory literally named
+      # "~" beside this file and mounts that, so the scan silently finds no
+      # transcripts and reports nothing rather than failing.
       - ${CLAUDE_CONFIG_DIR:-~/.claude}:/transcripts/.claude:ro
     command: sh -c "npm run db:migrate && npm run start"
 

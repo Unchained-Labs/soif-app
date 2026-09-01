@@ -17,7 +17,11 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+# `public/` is optional in Next.js and this repo does not ship one, but the
+# runtime stage copies it unconditionally — so `docker compose build` failed on
+# a clean checkout with "/app/public: not found". Creating it here keeps the
+# COPY honest without pretending the app has static assets it does not.
+RUN mkdir -p public && npm run build
 
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
