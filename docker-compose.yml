@@ -12,6 +12,7 @@ services:
       POSTGRES_DB: soif
     volumes:
       - db-data:/var/lib/postgresql/data
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U soif -d soif"]
       interval: 5s
@@ -42,6 +43,7 @@ services:
       # "~" beside this file and mounts that, so the scan silently finds no
       # transcripts and reports nothing rather than failing.
       - ${CLAUDE_CONFIG_DIR:-~/.claude}:/transcripts/.claude:ro
+    restart: unless-stopped
     command: sh -c "npm run db:migrate && npm run start"
 
 volumes:
